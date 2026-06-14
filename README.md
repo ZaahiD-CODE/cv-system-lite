@@ -50,11 +50,13 @@ cv_system/
 ### Быстрая установка
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/cv-system.git
-cd cv-system
+git clone https://github.com/ZaahiD-CODE/cv-system-lite.git
+cd cv-system-lite
 chmod +x install.sh
 ./install.sh
 ```
+
+Скрипт создаст `.env` с автоматически сгенерированными секретами. Пароль админа будет показан один раз при установке.
 
 ### Ручная установка
 
@@ -95,12 +97,19 @@ python3 -c "import torch; print(torch.cuda.is_available())"
 
 ```bash
 source venv/bin/activate
+export $(grep -v '^#' .env | xargs)
 python3 run_web.py
 ```
 
 Веб-интерфейс: `http://localhost:8000`
 
-Дефолтный логин: `admin` / `XCFqm22tYmzqCZUraP0E`
+### Переменные окружения (`.env`)
+
+| Переменная | Описание | Default |
+|-----------|----------|---------|
+| `JWT_SECRET_KEY` | Секрет для JWT-токенов | генерируется при установке |
+| `CV_ADMIN_PASSWORD` | Пароль админа | генерируется при установке |
+| `CORS_ORIGINS` | Разрешённые origins через запятую | `https://vision.vlesssec.ru,http://localhost:8000` |
 
 ### Как systemd-сервис
 
@@ -108,6 +117,12 @@ python3 run_web.py
 sudo cp cv-system.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now cv-system
+```
+
+Файл сервиса должен загружать переменные из `.env`:
+```ini
+[Service]
+EnvironmentFile=/root/cv_system/.env
 ```
 
 ### С HTTPS (Let's Encrypt)

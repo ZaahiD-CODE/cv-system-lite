@@ -1,3 +1,4 @@
+import cv2
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field
@@ -147,6 +148,3 @@ class Counter:
 
     def get_counts(self) -> Dict[str, int]:
         return dict(self.total_counts)
-
-
-import cv2

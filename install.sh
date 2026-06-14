@@ -60,12 +60,31 @@ for m in models:
 "
 
 echo ""
-echo "[5/5] Initializing database..."
+echo "[5/5] Initializing database and generating config..."
 python3 -c "
 from web.database import init_db
 init_db()
 print('Database initialized')
 "
+
+ENV_FILE=".env"
+if [ ! -f "$ENV_FILE" ]; then
+    JWT_SECRET=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+    ADMIN_PASS=$(python3 -c "import secrets; print(secrets.token_urlsafe(16))")
+    cat > "$ENV_FILE" <<EOF
+JWT_SECRET_KEY=$JWT_SECRET
+CV_ADMIN_PASSWORD=$ADMIN_PASS
+CORS_ORIGINS=https://vision.vlesssec.ru,http://localhost:8000
+EOF
+    chmod 600 "$ENV_FILE"
+    echo ""
+    echo "Generated .env with secrets (chmod 600)"
+    echo "Default login: admin / $ADMIN_PASS"
+    echo "Save this password — it won't be shown again!"
+else
+    echo ".env already exists, skipping generation"
+    echo "Default login: check CV_ADMIN_PASSWORD in .env"
+fi
 
 echo ""
 echo "========================================"
@@ -74,7 +93,7 @@ echo "========================================"
 echo ""
 echo "Start the server:"
 echo "  source venv/bin/activate"
+echo "  export \$(grep -v '^#' .env | xargs)"
 echo "  python3 run_web.py"
 echo ""
-echo "Default login: admin / XCFqm22tYmzqCZUraP0E"
 echo "Web interface: http://localhost:8000"

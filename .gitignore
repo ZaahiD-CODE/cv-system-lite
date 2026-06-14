@@ -10,7 +10,6 @@ build/
 *.sqlite3
 
 datasets/
-models/*.pt
 models/yolo*/
 
 output/
@@ -29,4 +28,3 @@ Thumbs.db
 *.pt
 test_input.avi
 cv_system.db
-output/

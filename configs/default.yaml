@@ -2,12 +2,12 @@ pipeline:
   source_type: "video"
   source_path: "0"
   detector:
-    model: "yolov8n.pt"
+    model: "yolo12n.pt"
     confidence: 0.5
     device: "cpu"
     input_size: 640
   tracker:
-    type: "botsort"
+    type: "centroid"
     track_thresh: 0.5
     match_thresh: 0.8
     max_age: 30

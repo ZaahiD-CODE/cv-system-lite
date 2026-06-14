@@ -21,9 +21,11 @@ from web.routers import auth_router, streams_router, users_router, training_rout
 
 app = FastAPI(title="CV System", version="1.0.0")
 
+ALLOWED_ORIGINS = os.environ.get("CORS_ORIGINS", "https://vision.vlesssec.ru,http://localhost:8000").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -47,12 +49,13 @@ async def startup():
     from web.database import SessionLocal
     db = SessionLocal()
     try:
+        admin_password = os.environ.get("CV_ADMIN_PASSWORD", "XCFqm22tYmzqCZUraP0E")
         admin = db.query(User).filter(User.username == "admin").first()
         if not admin:
             admin = User(
                 username="admin",
                 email="admin@vlesssec.ru",
-                hashed_password=get_password_hash("XCFqm22tYmzqCZUraP0E"),
+                hashed_password=get_password_hash(admin_password),
                 role="admin"
             )
             db.add(admin)

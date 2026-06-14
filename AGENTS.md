@@ -6,7 +6,7 @@ Real-time object detection, tracking, and counting system. Python backend (FastA
 
 **Repo**: `/root/cv_system/`
 **Domain**: `vision.vlesssec.ru`
-**Default admin**: `admin` / `XCFqm22tYmzqCZUraP0E`
+**Default admin**: `admin` / password in `.env` (`CV_ADMIN_PASSWORD`)
 
 ## Commands
 
