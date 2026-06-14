@@ -20,13 +20,13 @@ echo "[1/6] Creating virtual environment..."
 if ! command -v python3 &>/dev/null; then
     echo "  python3 not found, installing..."
     check_root
-    apt-get update -qq && apt-get install -y -qq python3 python3-pip
+    apt-get update -qq && apt-get install -y -qq python3 python3-pip python3-dev build-essential
 fi
 
-if ! python3 -m venv --help &>/dev/null 2>&1; then
+if ! dpkg -l python3-venv &>/dev/null 2>&1; then
     echo "  python3-venv not found, installing..."
     check_root
-    apt-get update -qq && apt-get install -y -qq python3-venv
+    apt-get update -qq && apt-get install -y -qq python3-venv python3-dev build-essential
 fi
 
 if [ ! -d "venv" ]; then
@@ -58,7 +58,7 @@ python3 -c "
 from ultralytics import YOLO
 import os
 
-os.chdir('$PROJECT_DIR')
+os.chdir('$(pwd)')
 models = [
     'yolo12n.pt', 'yolo12s.pt', 'yolo12m.pt', 'yolo12l.pt', 'yolo12x.pt',
 ]
@@ -136,40 +136,63 @@ if [ -n "$DOMAIN" ]; then
             apt-get install -y -qq certbot python3-certbot-nginx
         fi
 
-        NGINX_CONF="/etc/nginx/sites-available/cv-system"
+        echo "  Checking DNS for $DOMAIN..."
+        DOMAIN_IP=$(getent hosts "$DOMAIN" 2>/dev/null | awk '{ print $1 }' | head -1)
+        SERVER_IP=$(curl -s --max-time 5 ifconfig.me || hostname -I | awk '{print $1}')
+        if [ -z "$DOMAIN_IP" ]; then
+            echo "  WARNING: $DOMAIN does not resolve to any IP."
+            echo "  SSL certificate request will likely fail."
+            read -rp "  Continue anyway? [y/N]: " CONTINUE_SSL
+            if [[ ! "$CONTINUE_SSL" =~ ^[Yy]$ ]]; then
+                echo "  Skipping nginx + SSL setup. Configure DNS and re-run."
+                SETUP_NGINX="n"
+            fi
+        elif [ "$DOMAIN_IP" != "$SERVER_IP" ]; then
+            echo "  WARNING: $DOMAIN resolves to $DOMAIN_IP, but this server is $SERVER_IP"
+            echo "  SSL certificate request will likely fail."
+            read -rp "  Continue anyway? [y/N]: " CONTINUE_SSL
+            if [[ ! "$CONTINUE_SSL" =~ ^[Yy]$ ]]; then
+                echo "  Skipping nginx + SSL setup. Fix DNS and re-run."
+                SETUP_NGINX="n"
+            fi
+        fi
 
-        cat > "$NGINX_CONF" <<NGINX
+        if [[ "$SETUP_NGINX" =~ ^[Yy]$ ]]; then
+            NGINX_CONF="/etc/nginx/sites-available/cv-system"
+
+            cat > "$NGINX_CONF" <<'NGINX'
 server {
     listen 80;
-    server_name $DOMAIN;
+    server_name DOMAIN_PLACEHOLDER;
 
     location / {
         proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
 
         proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_read_timeout 86400;
     }
 }
 NGINX
+            sed -i "s/DOMAIN_PLACEHOLDER/$DOMAIN/" "$NGINX_CONF"
 
-        ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/cv-system
-        rm -f /etc/nginx/sites-enabled/default
+            ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/cv-system
+            rm -f /etc/nginx/sites-enabled/default
 
-        nginx -t
-        systemctl enable nginx
-        systemctl start nginx || systemctl reload nginx
+            nginx -t
+            systemctl enable nginx
+            systemctl start nginx 2>/dev/null || systemctl reload nginx
 
-        echo "  Requesting SSL certificate for $DOMAIN..."
-        certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email --redirect
+            echo "  Requesting SSL certificate for $DOMAIN..."
+            certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email --redirect
 
-        SERVICE_FILE="/etc/systemd/system/cv-system.service"
-        cat > "$SERVICE_FILE" <<SERVICE
+            SERVICE_FILE="/etc/systemd/system/cv-system.service"
+            cat > "$SERVICE_FILE" <<SERVICE
 [Unit]
 Description=CV System
 After=network.target
@@ -187,14 +210,15 @@ RestartSec=5
 WantedBy=multi-user.target
 SERVICE
 
-        systemctl daemon-reload
-        systemctl enable cv-system
-        systemctl start cv-system
+            systemctl daemon-reload
+            systemctl enable cv-system
+            systemctl start cv-system
 
-        echo ""
-        echo "  Nginx configured: https://$DOMAIN"
-        echo "  SSL auto-renew: certbot renew --quiet"
-        echo "  Service: systemctl status cv-system"
+            echo ""
+            echo "  Nginx configured: https://$DOMAIN"
+            echo "  SSL auto-renew: certbot renew --quiet"
+            echo "  Service: systemctl status cv-system"
+        fi
     else
         echo "Skipping nginx setup"
     fi
