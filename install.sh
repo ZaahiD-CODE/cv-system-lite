@@ -1,14 +1,34 @@
 #!/bin/bash
-set -e
+set -eo pipefail
 
 echo "========================================"
 echo "  CV System - Installation"
 echo "========================================"
 
 cd "$(dirname "$0")"
+PROJECT_DIR="$(pwd)"
+
+check_root() {
+    if [ "$(id -u)" -ne 0 ]; then
+        echo "Error: this step requires root. Run with sudo or as root."
+        exit 1
+    fi
+}
 
 echo ""
 echo "[1/6] Creating virtual environment..."
+if ! command -v python3 &>/dev/null; then
+    echo "  python3 not found, installing..."
+    check_root
+    apt-get update -qq && apt-get install -y -qq python3 python3-pip
+fi
+
+if ! python3 -m venv --help &>/dev/null 2>&1; then
+    echo "  python3-venv not found, installing..."
+    check_root
+    apt-get update -qq && apt-get install -y -qq python3-venv
+fi
+
 if [ ! -d "venv" ]; then
     python3 -m venv venv
 fi
@@ -27,11 +47,8 @@ import torch
 if torch.cuda.is_available():
     print(f'GPU found: {torch.cuda.get_device_name(0)}')
     print(f'Memory: {torch.cuda.get_device_properties(0).total_mem / 1024**3:.1f} GB')
-    print('Installing CUDA-enabled PyTorch...')
-    exit(0)
 else:
     print('No NVIDIA GPU detected, using CPU')
-    exit(0)
 "
 
 echo ""
@@ -41,6 +58,7 @@ python3 -c "
 from ultralytics import YOLO
 import os
 
+os.chdir('$PROJECT_DIR')
 models = [
     'yolo12n.pt', 'yolo12s.pt', 'yolo12m.pt', 'yolo12l.pt', 'yolo12x.pt',
 ]
@@ -53,7 +71,8 @@ for m in models:
         print(f'  {m} - downloading...')
         try:
             model = YOLO(m)
-            os.replace(m, path)
+            if os.path.exists(m):
+                os.replace(m, path)
             print(f'  {m} - done')
         except Exception as e:
             print(f'  {m} - failed: {e}')
@@ -103,6 +122,7 @@ if [ -n "$DOMAIN" ]; then
     read -rp "Setup nginx reverse proxy + Let's Encrypt SSL for $DOMAIN? [Y/n]: " SETUP_NGINX
     SETUP_NGINX=${SETUP_NGINX:-Y}
     if [[ "$SETUP_NGINX" =~ ^[Yy]$ ]]; then
+        check_root
         echo ""
         echo "[6/6] Configuring nginx + SSL..."
 
@@ -117,7 +137,6 @@ if [ -n "$DOMAIN" ]; then
         fi
 
         NGINX_CONF="/etc/nginx/sites-available/cv-system"
-        PROJECT_DIR="$(pwd)"
 
         cat > "$NGINX_CONF" <<NGINX
 server {
@@ -141,7 +160,10 @@ NGINX
 
         ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/cv-system
         rm -f /etc/nginx/sites-enabled/default
-        nginx -t && systemctl reload nginx
+
+        nginx -t
+        systemctl enable nginx
+        systemctl start nginx || systemctl reload nginx
 
         echo "  Requesting SSL certificate for $DOMAIN..."
         certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email --redirect
@@ -155,9 +177,9 @@ After=network.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=$(pwd)
-EnvironmentFile=$(pwd)/.env
-ExecStart=$(pwd)/venv/bin/python3 $(pwd)/run_web.py
+WorkingDirectory=$PROJECT_DIR
+EnvironmentFile=$PROJECT_DIR/.env
+ExecStart=$PROJECT_DIR/venv/bin/python3 $PROJECT_DIR/run_web.py
 Restart=always
 RestartSec=5
 
@@ -189,7 +211,6 @@ if [ -n "$DOMAIN" ] && [[ "$SETUP_NGINX" =~ ^[Yy]$ ]]; then
 else
     echo "Start the server:"
     echo "  source venv/bin/activate"
-    echo "  export \$(grep -v '^#' .env | xargs)"
     echo "  python3 run_web.py"
     echo ""
     echo "Web interface: http://localhost:8000"
