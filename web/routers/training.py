@@ -29,7 +29,7 @@ class AnnotationCreate(BaseModel):
 
 class TrainRequest(BaseModel):
     epochs: int = 30
-    base_model: str = "yolov8n.pt"
+    base_model: str = "yolo12n.pt"
 
 
 @router.get("/objects")

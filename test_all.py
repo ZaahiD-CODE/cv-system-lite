@@ -10,7 +10,7 @@ def test_detector():
     print("[1/5] Testing Detector...", end=" ")
     from src.core.detector import Detector, Detection
     
-    config = {"model": "yolov8n.pt", "confidence": 0.5, "device": "cpu", "input_size": 640}
+    config = {"model": "yolo12n.pt", "confidence": 0.5, "device": "cpu", "input_size": 640}
     detector = Detector(config)
     
     frame = np.random.randint(0, 255, (640, 640, 3), dtype=np.uint8)

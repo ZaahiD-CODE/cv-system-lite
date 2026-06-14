@@ -55,7 +55,7 @@ class Detector:
     def _load_model(self):
         from ultralytics import YOLO
 
-        model_path = self.config.get("model", "yolo11n.pt")
+        model_path = self.config.get("model", "yolo12n.pt")
         self.confidence = self.config.get("confidence", 0.5)
         self.input_size = self.config.get("input_size", 640)
 

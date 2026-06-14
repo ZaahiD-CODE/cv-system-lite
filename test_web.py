@@ -2,17 +2,30 @@ import subprocess, time, json, sys
 sys.path.insert(0, '/root/cv_system')
 
 from web.app import app
-from web.database import init_db, SessionLocal, User
+from web.database import init_db, SessionLocal, User, Stream, UserStream, Zone, Counter
 from web.auth import get_password_hash
+
+TEST_PASSWORD = "XCFqm22tYmzqCZUraP0E"
 
 init_db()
 db = SessionLocal()
+
+# Clean up test data from previous runs
+db.query(UserStream).delete()
+db.query(Counter).delete()
+db.query(Zone).delete()
+db.query(Stream).delete()
+db.query(User).filter(User.username != "admin").delete()
+db.commit()
+
 admin = db.query(User).filter(User.username == "admin").first()
 if not admin:
     admin = User(username="admin", email="admin@cvsystem.local",
-                 hashed_password=get_password_hash("admin123"), role="admin")
+                 hashed_password=get_password_hash(TEST_PASSWORD), role="admin")
     db.add(admin)
-    db.commit()
+else:
+    admin.hashed_password = get_password_hash(TEST_PASSWORD)
+db.commit()
 print("DB initialized, admin user ready")
 
 from fastapi.testclient import TestClient
@@ -20,7 +33,7 @@ client = TestClient(app)
 
 # Test login
 print("\n=== Test Login ===")
-r = client.post("/api/auth/login", json={"username": "admin", "password": "admin123"})
+r = client.post("/api/auth/login", json={"username": "admin", "password": TEST_PASSWORD})
 print(f"Login: {r.status_code}")
 data = r.json()
 token = data["access_token"]

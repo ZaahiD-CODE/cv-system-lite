@@ -34,7 +34,7 @@ class Stream(Base):
     source_type = Column(String(20), nullable=False)  # rtsp, video, camera
     source_path = Column(String(500), nullable=False)
     is_active = Column(Boolean, default=True)
-    detector_model = Column(String(100), default="yolov8n.pt")
+    detector_model = Column(String(100), default="yolo12n.pt")
     confidence = Column(Float, default=0.5)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

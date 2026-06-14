@@ -41,7 +41,7 @@ def get_default_config() -> Dict[str, Any]:
             "source_type": "video",
             "source_path": "0",
             "detector": {
-                "model": "yolov8n.pt",
+                "model": "yolo12n.pt",
                 "confidence": 0.5,
                 "device": "cpu",
                 "input_size": 640

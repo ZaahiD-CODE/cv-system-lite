@@ -23,7 +23,7 @@ def test_pipeline_integration():
             "source_type": "video",
             "source_path": "/tmp/test_pipe.avi",
             "detector": {
-                "model": "yolov8n.pt",
+                "model": "yolo12n.pt",
                 "confidence": 0.5,
                 "device": "cpu",
                 "input_size": 640

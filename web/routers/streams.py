@@ -13,7 +13,7 @@ class StreamCreate(BaseModel):
     name: str
     source_type: str
     source_path: str
-    detector_model: str = "yolov8n.pt"
+    detector_model: str = "yolo12n.pt"
     confidence: float = 0.5
 
 class StreamUpdate(BaseModel):
