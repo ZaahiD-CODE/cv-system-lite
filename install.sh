@@ -8,20 +8,20 @@ echo "========================================"
 cd "$(dirname "$0")"
 
 echo ""
-echo "[1/5] Creating virtual environment..."
+echo "[1/6] Creating virtual environment..."
 if [ ! -d "venv" ]; then
     python3 -m venv venv
 fi
 source venv/bin/activate
 
 echo ""
-echo "[2/5] Installing dependencies..."
+echo "[2/6] Installing dependencies..."
 pip install --upgrade pip -q
 pip install -r requirements.txt -q
 pip install -r web/requirements.txt -q
 
 echo ""
-echo "[3/5] Detecting GPU..."
+echo "[3/6] Detecting GPU..."
 python3 -c "
 import torch
 if torch.cuda.is_available():
@@ -35,7 +35,7 @@ else:
 "
 
 echo ""
-echo "[4/5] Downloading YOLO models..."
+echo "[4/6] Downloading YOLO models..."
 mkdir -p models
 python3 -c "
 from ultralytics import YOLO
@@ -60,7 +60,7 @@ for m in models:
 "
 
 echo ""
-echo "[5/5] Initializing database and generating config..."
+echo "[5/6] Initializing database and generating config..."
 python3 -c "
 from web.database import init_db
 init_db()
@@ -97,14 +97,100 @@ else
     echo "Default login: check CV_ADMIN_PASSWORD in .env"
 fi
 
+# Nginx + SSL setup
+if [ -n "$DOMAIN" ]; then
+    echo ""
+    read -rp "Setup nginx reverse proxy + Let's Encrypt SSL for $DOMAIN? [Y/n]: " SETUP_NGINX
+    SETUP_NGINX=${SETUP_NGINX:-Y}
+    if [[ "$SETUP_NGINX" =~ ^[Yy]$ ]]; then
+        echo ""
+        echo "[6/6] Configuring nginx + SSL..."
+
+        if ! command -v nginx &>/dev/null; then
+            echo "  Installing nginx..."
+            apt-get update -qq && apt-get install -y -qq nginx
+        fi
+
+        if ! command -v certbot &>/dev/null; then
+            echo "  Installing certbot..."
+            apt-get install -y -qq certbot python3-certbot-nginx
+        fi
+
+        NGINX_CONF="/etc/nginx/sites-available/cv-system"
+        PROJECT_DIR="$(pwd)"
+
+        cat > "$NGINX_CONF" <<NGINX
+server {
+    listen 80;
+    server_name $DOMAIN;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 86400;
+    }
+}
+NGINX
+
+        ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/cv-system
+        rm -f /etc/nginx/sites-enabled/default
+        nginx -t && systemctl reload nginx
+
+        echo "  Requesting SSL certificate for $DOMAIN..."
+        certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email --redirect
+
+        SERVICE_FILE="/etc/systemd/system/cv-system.service"
+        cat > "$SERVICE_FILE" <<SERVICE
+[Unit]
+Description=CV System
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=$(pwd)
+EnvironmentFile=$(pwd)/.env
+ExecStart=$(pwd)/venv/bin/python3 $(pwd)/run_web.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+
+        systemctl daemon-reload
+        systemctl enable cv-system
+        systemctl start cv-system
+
+        echo ""
+        echo "  Nginx configured: https://$DOMAIN"
+        echo "  SSL auto-renew: certbot renew --quiet"
+        echo "  Service: systemctl status cv-system"
+    else
+        echo "Skipping nginx setup"
+    fi
+fi
+
 echo ""
 echo "========================================"
 echo "  Installation complete!"
 echo "========================================"
 echo ""
-echo "Start the server:"
-echo "  source venv/bin/activate"
-echo "  export \$(grep -v '^#' .env | xargs)"
-echo "  python3 run_web.py"
-echo ""
-echo "Web interface: http://localhost:8000"
+if [ -n "$DOMAIN" ] && [[ "$SETUP_NGINX" =~ ^[Yy]$ ]]; then
+    echo "Web interface: https://$DOMAIN"
+    echo "Manage: systemctl {start,stop,restart,status} cv-system"
+else
+    echo "Start the server:"
+    echo "  source venv/bin/activate"
+    echo "  export \$(grep -v '^#' .env | xargs)"
+    echo "  python3 run_web.py"
+    echo ""
+    echo "Web interface: http://localhost:8000"
+fi
