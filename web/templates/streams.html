@@ -1,0 +1,471 @@
+{% extends "base.html" %}
+{% block title %}Потоки — CV System{% endblock %}
+{% block body %}
+<div class="app-layout">
+    <aside class="sidebar"></aside>
+    <main class="main-content">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+            <h2>Потоки</h2>
+            <button class="btn btn-primary" onclick="showModal('add-stream-modal')" id="btn-add-stream" style="display:none">+ Добавить поток</button>
+        </div>
+        <div class="streams-grid" id="streams-grid"></div>
+    </main>
+</div>
+
+<div class="modal-overlay" id="add-stream-modal">
+    <div class="modal">
+        <div class="modal-header"><h3>Добавить поток</h3><button class="modal-close" onclick="hideModal('add-stream-modal')">&times;</button></div>
+        <div class="modal-body">
+            <div class="form-group"><label>Название</label><input type="text" id="stream-name" class="form-control" placeholder="Входная дверь" required></div>
+            <div class="form-group"><label>Тип источника</label><select id="stream-type" class="form-control"><option value="rtsp">RTSP</option><option value="video">Видеофайл</option><option value="camera">Камера</option></select></div>
+            <div class="form-group"><label>Адрес источника</label><input type="text" id="stream-path" class="form-control" placeholder="rtsp://..." required></div>
+            <div class="form-group"><label>Модель</label><select id="stream-model" class="form-control"></select></div>
+            <div class="form-group"><label>Порог уверенности</label><input type="number" id="stream-confidence" class="form-control" value="0.5" min="0" max="1" step="0.1"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="hideModal('add-stream-modal')">Отмена</button>
+            <button class="btn btn-primary" onclick="createStream()">Создать</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="edit-stream-modal">
+    <div class="modal">
+        <div class="modal-header"><h3>Редактировать поток</h3><button class="modal-close" onclick="hideModal('edit-stream-modal')">&times;</button></div>
+        <div class="modal-body">
+            <input type="hidden" id="edit-stream-id">
+            <div class="form-group"><label>Название</label><input type="text" id="edit-stream-name" class="form-control" required></div>
+            <div class="form-group"><label>Тип</label><select id="edit-stream-type" class="form-control"><option value="rtsp">RTSP</option><option value="video">Видеофайл</option><option value="camera">Камера</option></select></div>
+            <div class="form-group"><label>Адрес</label><input type="text" id="edit-stream-path" class="form-control" required></div>
+            <div class="form-group"><label>Модель</label><select id="edit-stream-model" class="form-control"></select></div>
+            <div class="form-group"><label>Порог</label><input type="number" id="edit-stream-confidence" class="form-control" min="0" max="1" step="0.1"></div>
+            <div class="form-group"><label class="checkbox-label"><input type="checkbox" id="edit-stream-active"> Активен</label></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-danger" onclick="deleteCurrentStream()">Удалить</button>
+            <button class="btn btn-secondary" onclick="hideModal('edit-stream-modal')">Отмена</button>
+            <button class="btn btn-primary" onclick="updateStream()">Сохранить</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="zones-modal">
+    <div class="modal" style="max-width:95vw;width:1100px">
+        <div class="modal-header"><h3>Зоны и линии</h3><button class="modal-close" onclick="hideModal('zones-modal')">&times;</button></div>
+        <div class="modal-body">
+            <input type="hidden" id="zones-stream-id">
+            <div style="display:flex;gap:0;margin-bottom:16px;border-bottom:1px solid var(--border)">
+                <button class="tab-btn active" onclick="switchZoneTab('zones')">Зоны</button>
+                <button class="tab-btn" onclick="switchZoneTab('lines')">Линии</button>
+            </div>
+            <div id="tab-zones">
+                <div id="zone-list" style="margin-bottom:16px"></div>
+                <div style="border-top:1px solid var(--border);padding-top:16px">
+                    <h4 style="font-size:14px;margin-bottom:12px">Добавить зону</h4>
+                    <div style="display:flex;gap:12px;margin-bottom:12px">
+                        <div class="form-group" style="flex:1;margin-bottom:0"><label>Название</label><input type="text" id="zone-name" class="form-control" placeholder="Вход"></div>
+                        <div style="display:flex;align-items:flex-end;gap:8px">
+                            <button class="btn btn-secondary btn-sm" onclick="loadZoneSnapshot()">Загрузить кадр</button>
+                            <button class="btn btn-secondary btn-sm" onclick="undoZonePoint()">Отменить точку</button>
+                            <button class="btn btn-secondary btn-sm" onclick="clearZoneDrawing()">Очистить</button>
+                        </div>
+                    </div>
+                    <div class="training-canvas-container" style="margin-bottom:12px"><canvas id="zone-canvas" class="training-canvas" width="960" height="540" style="width:100%;height:auto;display:block"></canvas></div>
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                        <div id="zone-points-display" style="font-size:12px;color:var(--text-secondary)">Кликните на кадре чтобы добавить точки</div>
+                        <button class="btn btn-primary btn-sm" onclick="saveZone()">Сохранить зону</button>
+                    </div>
+                </div>
+            </div>
+            <div id="tab-lines" style="display:none">
+                <div id="line-list" style="margin-bottom:16px"></div>
+                <div style="border-top:1px solid var(--border);padding-top:16px">
+                    <h4 style="font-size:14px;margin-bottom:12px">Добавить линию</h4>
+                    <div style="display:flex;gap:12px;margin-bottom:12px">
+                        <div class="form-group" style="flex:1;margin-bottom:0"><label>Название</label><input type="text" id="line-name" class="form-control" placeholder="Линия входа"></div>
+                        <div class="form-group" style="width:140px;margin-bottom:0"><label>Направление</label><select id="line-direction" class="form-control"><option value="up">Вверх ↑</option><option value="down">Вниз ↓</option></select></div>
+                        <div style="display:flex;align-items:flex-end;gap:8px">
+                            <button class="btn btn-secondary btn-sm" onclick="loadLineSnapshot()">Загрузить кадр</button>
+                            <button class="btn btn-secondary btn-sm" onclick="clearLineDrawing()">Очистить</button>
+                        </div>
+                    </div>
+                    <div class="training-canvas-container" style="margin-bottom:12px"><canvas id="line-canvas" class="training-canvas" width="960" height="540" style="width:100%;height:auto;display:block"></canvas></div>
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                        <div id="line-points-display" style="font-size:12px;color:var(--text-secondary)">Кликните две точки для линии</div>
+                        <button class="btn btn-primary btn-sm" onclick="saveLine()">Сохранить линию</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="counter-modal">
+    <div class="modal">
+        <div class="modal-header"><h3>Добавить счётчик</h3><button class="modal-close" onclick="hideModal('counter-modal')">&times;</button></div>
+        <div class="modal-body">
+            <input type="hidden" id="counter-stream-id">
+            <div id="counter-list" style="margin-bottom:16px"></div>
+            <div style="border-top:1px solid var(--border);padding-top:16px">
+                <h4 style="font-size:14px;margin-bottom:12px">Новый счётчик</h4>
+                <div class="form-group"><label>Название</label><input type="text" id="counter-name" class="form-control" placeholder="Счётчик людей"></div>
+                <div class="form-group">
+                    <label>Тип</label>
+                    <div class="class-dropdown" id="type-dropdown">
+                        <div class="class-dropdown-trigger" onclick="toggleClasstypeDropdown()">
+                            <span id="type-dropdown-label">Зона</span>
+                            <span style="font-size:10px">▼</span>
+                        </div>
+                        <div class="class-dropdown-menu" id="type-dropdown-menu">
+                            <div class="class-item" onclick="selectCounterType('zone')">Зона</div>
+                            <div class="class-item" onclick="selectCounterType('line')">Линия</div>
+                        </div>
+                    </div>
+                    <input type="hidden" id="counter-type" value="zone">
+                </div>
+                <div class="form-group" id="counter-zone-group">
+                    <label>Зона</label>
+                    <div class="class-dropdown" id="zone-dropdown">
+                        <div class="class-dropdown-trigger" onclick="toggleZoneDropdown()">
+                            <span id="zone-dropdown-label">—</span>
+                            <span style="font-size:10px">▼</span>
+                        </div>
+                        <div class="class-dropdown-menu" id="zone-dropdown-menu">
+                            <div class="class-item" onclick="selectCounterZone('','—')">—</div>
+                        </div>
+                    </div>
+                    <input type="hidden" id="counter-zone" value="">
+                </div>
+                <div class="form-group" id="counter-line-group" style="display:none">
+                    <label>Линия</label>
+                    <div class="class-dropdown" id="line-dropdown">
+                        <div class="class-dropdown-trigger" onclick="toggleLineDropdown()">
+                            <span id="line-dropdown-label">—</span>
+                            <span style="font-size:10px">▼</span>
+                        </div>
+                        <div class="class-dropdown-menu" id="line-dropdown-menu">
+                            <div class="class-item" onclick="selectCounterLine('','—')">—</div>
+                        </div>
+                    </div>
+                    <input type="hidden" id="counter-line" value="">
+                </div>
+                <div class="form-group">
+                    <label>Классы объектов <span style="color:var(--text-secondary);font-size:11px">(не выбрано = все)</span></label>
+                    <div class="class-dropdown" id="class-dropdown">
+                        <div class="class-dropdown-trigger" onclick="toggleClassDropdown()">
+                            <span id="class-dropdown-label">Все классы</span>
+                            <span style="font-size:10px">▼</span>
+                        </div>
+                        <div class="class-dropdown-menu" id="class-dropdown-menu">
+                            <input type="text" id="class-search" class="form-control" style="margin:8px;width:calc(100% - 16px)" placeholder="Поиск..." oninput="filterClasses()">
+                            <div id="class-list" style="max-height:200px;overflow-y:auto;padding:0 8px 8px"></div>
+                        </div>
+                    </div>
+                </div>
+                <button class="btn btn-primary" style="width:100%;margin-top:8px" onclick="addCounter()">Добавить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.tab-btn { padding:10px 20px; background:none; border:none; border-bottom:2px solid transparent; color:var(--text-secondary); cursor:pointer; font-size:14px; }
+.tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
+.tab-btn:hover { color:var(--text-primary); }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+if (!Auth.requireAuth()) throw 'unauthorized';
+initLayout();
+if (Auth.isAdmin()) document.getElementById('btn-add-stream').style.display = '';
+let currentStreams = [];
+
+async function loadStreams() {
+    currentStreams = await API.get('/streams/');
+    const grid = document.getElementById('streams-grid');
+    if (currentStreams.length === 0) { grid.innerHTML = '<div class="empty-state"><div class="icon">🎥</div><h4>Нет потоков</h4><p>Добавьте поток</p></div>'; return; }
+    grid.innerHTML = currentStreams.map(s => {
+        const zones = s.zones || [];
+        const lines = s.lines || [];
+        const counters = s.counters || [];
+        return `
+        <div class="stream-card" data-id="${s.id}">
+            <div class="stream-preview">
+                ${s.is_active ? `<img src="/api/stream/${s.id}/mjpeg" alt="${s.name}" loading="lazy">` : `<div class="no-signal"><span style="font-size:32px">⏸</span><span>Неактивен</span></div>`}
+            </div>
+            <div class="stream-info">
+                <div style="display:flex;justify-content:space-between;align-items:center"><h4>${s.name}</h4><span class="badge ${s.is_active?'badge-active':'badge-inactive'}">${s.is_active?'Активен':'Неактивен'}</span></div>
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">${s.source_type}: ${s.source_path}</div>
+                ${zones.length>0?`<div style="margin-top:6px;font-size:12px;color:var(--text-secondary)">Зоны: ${zones.map(z=>z.name).join(', ')}</div>`:''}
+                ${lines.length>0?`<div style="margin-top:2px;font-size:12px;color:var(--text-secondary)">Линии: ${lines.map(l=>l.name).join(', ')}</div>`:''}
+                <div class="stream-counters">${counters.map(c=>`<div class="counter-badge"><span>${c.name}</span><span class="count">${c.current_count}</span></div>`).join('')}</div>
+                ${Auth.isAdmin()?`<div style="margin-top:12px;display:flex;gap:8px"><button class="btn btn-secondary btn-sm" onclick="editStream(${s.id})">Изменить</button><button class="btn btn-secondary btn-sm" onclick="manageZones(${s.id})">Зоны и линии</button><button class="btn btn-secondary btn-sm" onclick="manageCounters(${s.id})">Счётчики</button></div>`:''}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function createStream() {
+    try { await API.post('/streams/', { name:document.getElementById('stream-name').value, source_type:document.getElementById('stream-type').value, source_path:document.getElementById('stream-path').value, detector_model:document.getElementById('stream-model').value, confidence:parseFloat(document.getElementById('stream-confidence').value) }); hideModal('add-stream-modal'); Toast.success('Поток создан'); loadStreams(); } catch(e){Toast.error(e.message);}
+}
+function editStream(id) {
+    const s=currentStreams.find(x=>parseInt(x.id)===parseInt(id)); if(!s)return;
+    document.getElementById('edit-stream-id').value=s.id;
+    document.getElementById('edit-stream-name').value=s.name;
+    document.getElementById('edit-stream-type').value=s.source_type;
+    document.getElementById('edit-stream-path').value=s.source_path;
+    document.getElementById('edit-stream-confidence').value=s.confidence;
+    document.getElementById('edit-stream-active').checked=s.is_active;
+    populateModelSelect('edit-stream-model', s.detector_model);
+    showModal('edit-stream-modal');
+}
+async function updateStream() {
+    const id=document.getElementById('edit-stream-id').value;
+    try { await API.put(`/streams/${id}`,{name:document.getElementById('edit-stream-name').value,source_type:document.getElementById('edit-stream-type').value,source_path:document.getElementById('edit-stream-path').value,detector_model:document.getElementById('edit-stream-model').value,confidence:parseFloat(document.getElementById('edit-stream-confidence').value),is_active:document.getElementById('edit-stream-active').checked}); hideModal('edit-stream-modal'); Toast.success('Поток обновлён'); loadStreams(); } catch(e){Toast.error(e.message);}
+}
+async function deleteCurrentStream() {
+    const id=document.getElementById('edit-stream-id').value; if(!confirm('Удалить поток?'))return;
+    try { await API.delete(`/streams/${id}`); hideModal('edit-stream-modal'); Toast.success('Удалён'); loadStreams(); } catch(e){Toast.error(e.message);}
+}
+
+// --- ZONES & LINES MODAL ---
+function switchZoneTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.getElementById('tab-zones').style.display = tab==='zones'?'':'none';
+    document.getElementById('tab-lines').style.display = tab==='lines'?'':'none';
+    const btns = document.querySelectorAll('.tab-btn');
+    (tab==='zones'?btns[0]:btns[1]).classList.add('active');
+}
+
+function manageZones(streamId, tab) {
+    streamId = parseInt(streamId);
+    tab = tab || 'zones';
+    document.getElementById('zones-stream-id').value = streamId;
+    const s = currentStreams.find(x=>parseInt(x.id)===streamId);
+    if (!s) { Toast.error('Поток не найден'); return; }
+    const zones = s.zones || [];
+    const lines = s.lines || [];
+    // Zone list
+    const zl = document.getElementById('zone-list');
+    zl.innerHTML = zones.length===0 ? '<div style="color:var(--text-secondary);font-size:13px">Нет зон</div>' :
+        zones.map(z=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)"><span>${z.name} <span style="color:var(--text-secondary);font-size:11px">(${z.points.length} точек)</span></span><button class="btn btn-danger btn-sm" onclick="deleteZone(${streamId},${z.id})">Удалить</button></div>`).join('');
+    // Line list
+    const ll = document.getElementById('line-list');
+    ll.innerHTML = lines.length===0 ? '<div style="color:var(--text-secondary);font-size:13px">Нет линий</div>' :
+        lines.map(l=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)"><span>${l.name} <span style="color:var(--text-secondary);font-size:11px">(${l.direction==='up'?'↑':'↓'})</span></span><button class="btn btn-danger btn-sm" onclick="deleteLine(${streamId},${l.id})">Удалить</button></div>`).join('');
+    // Reset canvases
+    zonePoints=[]; linePoints=[]; zoneSnapshotImg=null; lineSnapshotImg=null;
+    redrawZoneCanvas(); redrawLineCanvas();
+    updateZonePointsDisplay(); updateLinePointsDisplay();
+    switchZoneTab(tab);
+    showModal('zones-modal');
+}
+
+// --- Zone drawing ---
+const zoneCanvas=document.getElementById('zone-canvas'), zoneCtx=zoneCanvas.getContext('2d');
+let zoneSnapshotImg=null, zonePoints=[];
+
+async function loadZoneSnapshot() {
+    const sid=document.getElementById('zones-stream-id').value;
+    try { const r=await fetch(`/api/stream/${sid}/snapshot`); if(!r.ok)throw new Error('Ошибка'); const b=await r.blob(); const u=URL.createObjectURL(b); const img=new Image(); img.onload=()=>{zoneCanvas.width=img.naturalWidth;zoneCanvas.height=img.naturalHeight;zoneSnapshotImg=img;zoneCtx.drawImage(img,0,0);zonePoints=[];updateZonePointsDisplay();URL.revokeObjectURL(u);}; img.src=u; } catch(e){Toast.error(e.message);}
+}
+zoneCanvas.addEventListener('click',e=>{const r=zoneCanvas.getBoundingClientRect();const sx=zoneCanvas.width/r.width,sy=zoneCanvas.height/r.height;zonePoints.push([Math.round((e.clientX-r.left)*sx),Math.round((e.clientY-r.top)*sy)]);redrawZoneCanvas();updateZonePointsDisplay();});
+zoneCanvas.addEventListener('mousemove',e=>{if(!zonePoints.length)return;const r=zoneCanvas.getBoundingClientRect();const sx=zoneCanvas.width/r.width,sy=zoneCanvas.height/r.height;const mx=(e.clientX-r.left)*sx,my=(e.clientY-r.top)*sy;redrawZoneCanvas();zoneCtx.beginPath();zoneCtx.moveTo(zonePoints[zonePoints.length-1][0],zonePoints[zonePoints.length-1][1]);zoneCtx.lineTo(mx,my);zoneCtx.strokeStyle='rgba(79,195,247,0.6)';zoneCtx.lineWidth=1;zoneCtx.setLineDash([5,5]);zoneCtx.stroke();zoneCtx.setLineDash([]);});
+function redrawZoneCanvas(){if(zoneSnapshotImg)zoneCtx.drawImage(zoneSnapshotImg,0,0);else{zoneCtx.fillStyle='#111';zoneCtx.fillRect(0,0,zoneCanvas.width,zoneCanvas.height);zoneCtx.fillStyle='#555';zoneCtx.font='16px sans-serif';zoneCtx.textAlign='center';zoneCtx.fillText('Загрузите кадр',zoneCanvas.width/2,zoneCanvas.height/2);}if(!zonePoints.length)return;zoneCtx.beginPath();zoneCtx.moveTo(zonePoints[0][0],zonePoints[0][1]);for(let i=1;i<zonePoints.length;i++)zoneCtx.lineTo(zonePoints[i][0],zonePoints[i][1]);if(zonePoints.length>=3){zoneCtx.closePath();zoneCtx.fillStyle='rgba(79,195,247,0.15)';zoneCtx.fill();}zoneCtx.strokeStyle='#4fc3f7';zoneCtx.lineWidth=2;zoneCtx.stroke();zonePoints.forEach(p=>{zoneCtx.beginPath();zoneCtx.arc(p[0],p[1],5,0,Math.PI*2);zoneCtx.fillStyle='#4fc3f7';zoneCtx.fill();zoneCtx.strokeStyle='#fff';zoneCtx.lineWidth=1.5;zoneCtx.stroke();});}
+function undoZonePoint(){if(zonePoints.length){zonePoints.pop();redrawZoneCanvas();updateZonePointsDisplay();}}
+function clearZoneDrawing(){zonePoints=[];redrawZoneCanvas();updateZonePointsDisplay();}
+function updateZonePointsDisplay(){const el=document.getElementById('zone-points-display');el.textContent=zonePoints.length===0?'Кликните на кадре чтобы добавить точки':`Точек: ${zonePoints.length}`+(zonePoints.length>=3?' (можно сохранять)':' (мин. 3)');}
+async function saveZone(){const sid=document.getElementById('zones-stream-id').value;const name=document.getElementById('zone-name').value;if(!name){Toast.error('Введите название');return;}if(zonePoints.length<3){Toast.error('Минимум 3 точки');return;}try{await API.post(`/streams/${sid}/zones`,{name,points:zonePoints});Toast.success('Зона сохранена');document.getElementById('zone-name').value='';zonePoints=[];redrawZoneCanvas();updateZonePointsDisplay();await loadStreams();manageZones(sid,'zones');}catch(e){Toast.error(e.message);}}
+async function deleteZone(sid,zid){try{await API.delete(`/streams/${sid}/zones/${zid}`);Toast.success('Зона удалена');await loadStreams();manageZones(sid,'zones');}catch(e){Toast.error(e.message);}}
+
+// --- Line drawing ---
+const lineCanvas=document.getElementById('line-canvas'), lineCtx=lineCanvas.getContext('2d');
+let lineSnapshotImg=null, linePoints=[];
+
+async function loadLineSnapshot() {
+    const sid=document.getElementById('zones-stream-id').value;
+    try { const r=await fetch(`/api/stream/${sid}/snapshot`); if(!r.ok)throw new Error('Ошибка'); const b=await r.blob(); const u=URL.createObjectURL(b); const img=new Image(); img.onload=()=>{lineCanvas.width=img.naturalWidth;lineCanvas.height=img.naturalHeight;lineSnapshotImg=img;lineCtx.drawImage(img,0,0);linePoints=[];updateLinePointsDisplay();URL.revokeObjectURL(u);}; img.src=u; } catch(e){Toast.error(e.message);}
+}
+lineCanvas.addEventListener('click',e=>{if(linePoints.length>=2)return;const r=lineCanvas.getBoundingClientRect();const sx=lineCanvas.width/r.width,sy=lineCanvas.height/r.height;linePoints.push([Math.round((e.clientX-r.left)*sx),Math.round((e.clientY-r.top)*sy)]);redrawLineCanvas();updateLinePointsDisplay();});
+function redrawLineCanvas(){if(lineSnapshotImg)lineCtx.drawImage(lineSnapshotImg,0,0);else{lineCtx.fillStyle='#111';lineCtx.fillRect(0,0,lineCanvas.width,lineCanvas.height);lineCtx.fillStyle='#555';lineCtx.font='16px sans-serif';lineCtx.textAlign='center';lineCtx.fillText('Загрузите кадр',lineCanvas.width/2,lineCanvas.height/2);}if(linePoints.length===0)return;if(linePoints.length===2){lineCtx.beginPath();lineCtx.moveTo(linePoints[0][0],linePoints[0][1]);lineCtx.lineTo(linePoints[1][0],linePoints[1][1]);lineCtx.strokeStyle='#ef5350';lineCtx.lineWidth=3;lineCtx.stroke();const mx=(linePoints[0][0]+linePoints[1][0])/2,my=(linePoints[0][1]+linePoints[1][1])/2;const dir=document.getElementById('line-direction').value;const ay=dir==='up'?my-30:my+30;lineCtx.beginPath();lineCtx.moveTo(mx,my);lineCtx.lineTo(mx,ay);lineCtx.strokeStyle='#66bb6a';lineCtx.lineWidth=3;lineCtx.stroke();lineCtx.beginPath();lineCtx.arc(mx,ay,6,0,Math.PI*2);lineCtx.fillStyle='#66bb6a';lineCtx.fill();}linePoints.forEach((p,i)=>{lineCtx.beginPath();lineCtx.arc(p[0],p[1],7,0,Math.PI*2);lineCtx.fillStyle=i===0?'#4fc3f7':'#ef5350';lineCtx.fill();lineCtx.strokeStyle='#fff';lineCtx.lineWidth=2;lineCtx.stroke();});}
+function clearLineDrawing(){linePoints=[];redrawLineCanvas();updateLinePointsDisplay();}
+function updateLinePointsDisplay(){const el=document.getElementById('line-points-display');el.textContent=linePoints.length===0?'Кликните две точки для линии':linePoints.length===1?'Отметьте вторую точку':'Линия задана — можно сохранять';}
+async function saveLine(){const sid=document.getElementById('zones-stream-id').value;const name=document.getElementById('line-name').value;if(!name){Toast.error('Введите название');return;}if(linePoints.length!==2){Toast.error('Нужно 2 точки');return;}try{await API.post(`/streams/${sid}/lines`,{name,start:linePoints[0],end:linePoints[1],direction:document.getElementById('line-direction').value});Toast.success('Линия сохранена');document.getElementById('line-name').value='';linePoints=[];redrawLineCanvas();updateLinePointsDisplay();await loadStreams();manageZones(sid,'lines');}catch(e){Toast.error(e.message);}}
+async function deleteLine(sid,lid){try{await API.delete(`/streams/${sid}/lines/${lid}`);Toast.success('Линия удалена');await loadStreams();manageZones(sid,'lines');}catch(e){Toast.error(e.message);}}
+
+// --- COUNTERS ---
+function onCounterTypeChange(){const t=document.getElementById('counter-type').value;document.getElementById('counter-zone-group').style.display=t==='zone'?'':'none';document.getElementById('counter-line-group').style.display=t==='line'?'':'none';}
+
+async function manageCounters(streamId) {
+    streamId = parseInt(streamId);
+    document.getElementById('counter-stream-id').value = streamId;
+    const s = currentStreams.find(x=>parseInt(x.id)===streamId);
+    if (!s) { Toast.error('Поток не найден'); return; }
+    const zones = s.zones || [];
+    const lines = s.lines || [];
+    const counters = s.counters || [];
+    const list = document.getElementById('counter-list');
+    // Populate zone dropdown
+    const zoneMenu = document.getElementById('zone-dropdown-menu');
+    zoneMenu.innerHTML = '<div class="class-item" onclick="selectCounterZone(\'\',\'—\')">—</div>' +
+        zones.map(z=>`<div class="class-item" onclick="selectCounterZone('${z.id}','${z.name}')">${z.name}</div>`).join('');
+    document.getElementById('counter-zone').value = '';
+    document.getElementById('zone-dropdown-label').textContent = '—';
+    // Populate line dropdown
+    const lineMenu = document.getElementById('line-dropdown-menu');
+    lineMenu.innerHTML = '<div class="class-item" onclick="selectCounterLine(\'\',\'—\')">—</div>' +
+        lines.map(l=>`<div class="class-item" onclick="selectCounterLine('${l.id}','${l.name}')">${l.name} ${l.direction==='up'?'↑':'↓'}</div>`).join('');
+    document.getElementById('counter-line').value = '';
+    document.getElementById('line-dropdown-label').textContent = '—';
+    // Reset type
+    document.getElementById('counter-type').value = 'zone';
+    document.getElementById('type-dropdown-label').textContent = 'Зона';
+    // List existing counters
+    if (counters.length===0) { list.innerHTML = '<div style="color:var(--text-secondary);font-size:13px">Нет счётчиков</div>'; }
+    else { list.innerHTML = counters.map(c => {
+        const target = c.type==='zone' ? (zones.find(z=>z.id===c.zone_id)||{}).name||'?' : (lines.find(l=>l.id===c.line_id)||{}).name||'?';
+        const cls = c.class_filter && c.class_filter.length ? c.class_filter.join(', ') : 'Все';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)"><div><span>${c.name}</span><span style="color:var(--text-secondary);font-size:12px;margin-left:8px">→ ${target}</span><span style="color:var(--text-secondary);font-size:11px;margin-left:8px">[${cls}]</span><span style="color:var(--accent);margin-left:8px">${c.current_count}</span></div><button class="btn btn-danger btn-sm" onclick="deleteCounter(${streamId},${c.id})">Удалить</button></div>`;
+    }).join(''); }
+    onCounterTypeChange();
+    await loadClassOptions(streamId);
+    showModal('counter-modal');
+}
+
+let allClasses = [];
+let selectedClassIds = new Set();
+
+async function loadClassOptions(streamId) {
+    try {
+        allClasses = await API.get(`/training/classes`);
+    } catch { allClasses = []; }
+    selectedClassIds = new Set();
+    document.getElementById('class-search').value = '';
+    document.getElementById('class-list').innerHTML = '<div style="padding:12px;color:var(--text-secondary);text-align:center">Введите название для поиска</div>';
+    updateClassLabel();
+}
+
+function renderClassList(classes) {
+    const standard = classes.filter(c => c.type === 'standard');
+    const custom = classes.filter(c => c.type === 'custom');
+    let html = '';
+    if (custom.length) {
+        html += '<div class="class-section">Кастомные</div>';
+        custom.forEach(c => {
+            html += `<label class="class-item"><input type="checkbox" value="${c.id}" onchange="onClassToggle(${c.id})" ${selectedClassIds.has(c.id)?'checked':''}> ${c.name_ru}</label>`;
+        });
+    }
+    if (standard.length) {
+        html += '<div class="class-section">Стандартные (YOLO)</div>';
+        standard.forEach(c => {
+            html += `<label class="class-item"><input type="checkbox" value="${c.id}" onchange="onClassToggle(${c.id})" ${selectedClassIds.has(c.id)?'checked':''}> ${c.name_ru}</label>`;
+        });
+    }
+    document.getElementById('class-list').innerHTML = html || '<div style="padding:12px;color:var(--text-secondary);text-align:center">Ничего не найдено</div>';
+}
+
+function onClassToggle(id) {
+    if (selectedClassIds.has(id)) selectedClassIds.delete(id); else selectedClassIds.add(id);
+    updateClassLabel();
+}
+
+function updateClassLabel() {
+    const label = document.getElementById('class-dropdown-label');
+    if (selectedClassIds.size === 0) { label.textContent = 'Все классы'; return; }
+    const names = allClasses.filter(c => selectedClassIds.has(c.id)).map(c => c.name_ru);
+    label.textContent = names.length > 3 ? names.slice(0,3).join(', ') + ` +${names.length-3}` : names.join(', ');
+}
+
+function toggleClassDropdown() {
+    document.getElementById('class-dropdown-menu').classList.toggle('open');
+}
+
+function filterClasses() {
+    const q = document.getElementById('class-search').value.toLowerCase().trim();
+    if (!q) {
+        document.getElementById('class-list').innerHTML = '<div style="padding:12px;color:var(--text-secondary);text-align:center">Введите название для поиска</div>';
+        return;
+    }
+    const filtered = allClasses.filter(c => c.name_ru.toLowerCase().includes(q) || c.name.toLowerCase().includes(q));
+    renderClassList(filtered);
+}
+
+document.addEventListener('click', e => {
+    ['class-dropdown','type-dropdown','zone-dropdown','line-dropdown'].forEach(id => {
+        const dd = document.getElementById(id);
+        if (dd && !dd.contains(e.target)) {
+            const menu = dd.querySelector('.class-dropdown-menu');
+            if (menu) menu.classList.remove('open');
+        }
+    });
+});
+
+// --- Type dropdown ---
+function toggleClasstypeDropdown() { document.getElementById('type-dropdown-menu').classList.toggle('open'); }
+function selectCounterType(val) {
+    document.getElementById('counter-type').value = val;
+    document.getElementById('type-dropdown-label').textContent = val === 'zone' ? 'Зона' : 'Линия';
+    document.getElementById('type-dropdown-menu').classList.remove('open');
+    onCounterTypeChange();
+}
+
+// --- Zone dropdown ---
+function toggleZoneDropdown() { document.getElementById('zone-dropdown-menu').classList.toggle('open'); }
+function selectCounterZone(id, name) {
+    document.getElementById('counter-zone').value = id;
+    document.getElementById('zone-dropdown-label').textContent = name;
+    document.getElementById('zone-dropdown-menu').classList.remove('open');
+}
+
+// --- Line dropdown ---
+function toggleLineDropdown() { document.getElementById('line-dropdown-menu').classList.toggle('open'); }
+function selectCounterLine(id, name) {
+    document.getElementById('counter-line').value = id;
+    document.getElementById('line-dropdown-label').textContent = name;
+    document.getElementById('line-dropdown-menu').classList.remove('open');
+}
+
+async function addCounter() {
+    const sid=document.getElementById('counter-stream-id').value;
+    const type=document.getElementById('counter-type').value;
+    const body={name:document.getElementById('counter-name').value,type};
+    if(type==='zone'){body.zone_id=parseInt(document.getElementById('counter-zone').value)||null;}
+    else{body.line_id=parseInt(document.getElementById('counter-line').value)||null;}
+    if(selectedClassIds.size>0){body.class_filter=Array.from(selectedClassIds);}
+    try{await API.post(`/streams/${sid}/counters`,body);Toast.success('Счётчик добавлен');await loadStreams();manageCounters(sid);}catch(e){Toast.error(e.message);}
+}
+
+async function deleteCounter(sid,cid){try{await API.delete(`/streams/${sid}/counters/${cid}`);Toast.success('Счётчик удалён');await loadStreams();manageCounters(sid);}catch(e){Toast.error(e.message);}}
+
+async function loadModels() {
+    try {
+        const models = await API.get('/training/models');
+        window._allModels = models;
+        populateModelSelect('stream-model');
+    } catch (e) { console.error(e); }
+}
+
+function populateModelSelect(selectId, selectedValue) {
+    const sel = document.getElementById(selectId);
+    if (!sel || !window._allModels) return;
+    const models = window._allModels;
+    const standard = Object.entries(models).filter(([k,v]) => v.type === 'standard');
+    const custom = Object.entries(models).filter(([k,v]) => v.type === 'custom');
+    let html = '';
+    if (standard.length) {
+        html += standard.map(([k, v]) => `<option value="${k}" ${k===selectedValue?'selected':''}>${v.name} (${v.size})</option>`).join('');
+    }
+    if (custom.length) {
+        html += '<optgroup label="Кастомные модели">';
+        html += custom.map(([k, v]) => `<option value="${v.model_path}" ${v.model_path===selectedValue?'selected':''}>${v.name}</option>`).join('');
+        html += '</optgroup>';
+    }
+    sel.innerHTML = html;
+}
+
+loadModels();
+loadStreams();
+</script>
+{% endblock %}

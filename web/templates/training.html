@@ -1,0 +1,365 @@
+{% extends "base.html" %}
+{% block title %}Обучение — CV System{% endblock %}
+{% block body %}
+<div class="app-layout">
+    <aside class="sidebar"></aside>
+    <main class="main-content">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+            <h2>Обучение кастомных объектов</h2>
+            <button class="btn btn-primary" onclick="showCreateObject()">+ Новый объект</button>
+        </div>
+
+        <div class="card" style="margin-bottom:16px">
+            <div class="card-header"><h3>Объекты</h3></div>
+            <div class="card-body">
+                <div id="objects-list"><div class="empty-state"><p>Создайте объект для начала</p></div></div>
+            </div>
+        </div>
+
+        <div id="annotation-section" style="display:none">
+            <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px">
+                <div>
+                    <div class="card" style="margin-bottom:16px">
+                        <div class="card-header">
+                            <h3 id="annotation-title">Разметка</h3>
+                            <div style="display:flex;gap:8px;align-items:center">
+                                <select id="annot-stream-select" class="form-control" style="width:auto" onchange="onAnnotStreamChange()">
+                                    <option value="">Выберите поток</option>
+                                </select>
+                                <button class="btn btn-secondary btn-sm" onclick="captureCurrentFrame()">Захватить кадр</button>
+                                <button class="btn btn-secondary btn-sm" onclick="resetToLive()">Сбросить кадр</button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="training-canvas-container" style="margin-bottom:12px;position:relative">
+                                <img id="live-preview" style="width:100%;height:auto;display:none" crossorigin>
+                                <canvas id="annot-canvas" class="training-canvas" width="960" height="540" style="width:100%;height:auto;display:block;cursor:crosshair"></canvas>
+                                <div id="live-indicator" style="display:none;position:absolute;top:8px;left:8px;background:rgba(239,83,80,0.9);color:#fff;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:600">● LIVE</div>
+                            </div>
+                            <div style="display:flex;justify-content:space-between;align-items:center">
+                                <div id="annot-status" style="font-size:12px;color:var(--text-secondary)">Выберите поток для живого просмотра</div>
+                                <div style="display:flex;gap:8px">
+                                    <button class="btn btn-secondary btn-sm" onclick="clearBbox()">Очистить bbox</button>
+                                    <button class="btn btn-primary btn-sm" onclick="saveAnnotation()">Сохранить разметку</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <div class="card" style="margin-bottom:16px">
+                        <div class="card-header"><h3>Кадры</h3></div>
+                        <div class="card-body">
+                            <div id="samples-count" style="margin-bottom:12px;font-size:14px">Кадров: 0</div>
+                            <div id="samples-list" style="max-height:400px;overflow-y:auto"></div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header"><h3>Обучение</h3></div>
+                        <div class="card-body">
+                            <div class="form-group"><label>Эпохи</label><input type="number" id="train-epochs" class="form-control" value="30" min="5" max="200"></div>
+                            <div class="form-group"><label>Базовая модель</label>
+                                <select id="train-model" class="form-control"></select>
+                            </div>
+                            <button class="btn btn-success" style="width:100%" onclick="startTraining()">Начать обучение</button>
+                            <div id="train-progress" style="margin-top:12px;display:none">
+                                <div class="progress"><div class="progress-bar" id="train-bar" style="width:0%"></div></div>
+                                <div id="train-status-text" style="font-size:12px;color:var(--text-secondary);margin-top:4px">0%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<div class="modal-overlay" id="create-obj-modal">
+    <div class="modal" style="max-width:400px">
+        <div class="modal-header"><h3>Новый объект</h3><button class="modal-close" onclick="hideModal('create-obj-modal')">&times;</button></div>
+        <div class="modal-body">
+            <div class="form-group"><label>Название объекта</label><input type="text" id="new-obj-name" class="form-control" placeholder="Например: Каска"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="hideModal('create-obj-modal')">Отмена</button>
+            <button class="btn btn-primary" onclick="createObject()">Создать</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+if (!Auth.requireAdmin()) throw 'unauthorized';
+initLayout();
+
+let currentObjectId = null;
+let currentBbox = null;
+let isDrawing = false;
+let startX, startY;
+let snapshotImg = null;
+let trainPollTimer = null;
+let isLive = false;
+
+const canvas = document.getElementById('annot-canvas');
+const ctx = canvas.getContext('2d');
+const livePreview = document.getElementById('live-preview');
+
+// --- Objects ---
+function showCreateObject() {
+    document.getElementById('new-obj-name').value = '';
+    showModal('create-obj-modal');
+}
+
+async function createObject() {
+    const name = document.getElementById('new-obj-name').value.trim();
+    if (!name) { Toast.error('Введите название'); return; }
+    try {
+        const r = await API.post('/training/objects', { name });
+        hideModal('create-obj-modal');
+        Toast.success('Объект создан');
+        await loadObjects();
+        selectObject(r.id);
+    } catch (e) { Toast.error(e.message); }
+}
+
+async function loadObjects() {
+    try {
+        const objects = await API.get('/training/objects');
+        const list = document.getElementById('objects-list');
+        if (objects.length === 0) {
+            list.innerHTML = '<div class="empty-state"><p>Нет объектов</p></div>';
+            return;
+        }
+        const st = { pending: 'Новый', collecting: 'Сбор данных', training: 'Обучение', ready: 'Готово', failed: 'Ошибка' };
+        list.innerHTML = objects.map(o => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+                <div>
+                    <strong>${o.name}</strong>
+                    <span style="color:var(--text-secondary);font-size:12px;margin-left:8px">${o.sample_count} кадров</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <span class="badge badge-${o.status}">${st[o.status]||o.status}</span>
+                    ${o.status==='training'?`<span style="font-size:12px;color:var(--accent)">${o.progress}%</span>`:''}
+                    <button class="btn btn-secondary btn-sm" onclick="selectObject(${o.id})">Открыть</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteObject(${o.id})">×</button>
+                </div>
+            </div>
+        `).join('');
+    } catch (e) { console.error(e); }
+}
+
+async function selectObject(id) {
+    currentObjectId = id;
+    document.getElementById('annotation-section').style.display = '';
+    document.getElementById('annotation-title').textContent = 'Разметка объекта #' + id;
+    currentBbox = null;
+    snapshotImg = null;
+    stopLive();
+    canvas.style.display = 'block';
+    ctx.fillStyle = '#111'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#555'; ctx.font = '16px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('Выберите поток — покажется живое видео', canvas.width / 2, canvas.height / 2);
+    await loadAnnotStreams();
+    await loadSamples();
+}
+
+// --- Streams in annotation ---
+async function loadAnnotStreams() {
+    const streams = await API.get('/streams/');
+    const sel = document.getElementById('annot-stream-select');
+    sel.innerHTML = '<option value="">Выберите поток</option>' +
+        streams.filter(s => s.is_active).map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+}
+
+function onAnnotStreamChange() {
+    const sid = document.getElementById('annot-stream-select').value;
+    if (!sid) { stopLive(); return; }
+    startLive(sid);
+}
+
+// --- Live preview ---
+function startLive(streamId) {
+    stopLive();
+    livePreview.src = `/api/stream/${streamId}/mjpeg`;
+    livePreview.style.display = 'block';
+    canvas.style.display = 'none';
+    isLive = true;
+    document.getElementById('live-indicator').style.display = '';
+    document.getElementById('annot-status').textContent = 'Нажмите «Захватить кадр» когда увидите нужный момент';
+}
+
+function stopLive() {
+    livePreview.src = '';
+    livePreview.style.display = 'none';
+    isLive = false;
+    document.getElementById('live-indicator').style.display = 'none';
+}
+
+function captureCurrentFrame() {
+    if (!isLive) { Toast.error('Сначала выберите поток'); return; }
+    const tmpCanvas = document.createElement('canvas');
+    tmpCanvas.width = livePreview.naturalWidth || livePreview.videoWidth || 960;
+    tmpCanvas.height = livePreview.naturalHeight || livePreview.videoHeight || 540;
+    tmpCanvas.getContext('2d').drawImage(livePreview, 0, 0, tmpCanvas.width, tmpCanvas.height);
+
+    canvas.width = tmpCanvas.width;
+    canvas.height = tmpCanvas.height;
+    ctx.drawImage(tmpCanvas, 0, 0);
+    snapshotImg = new Image();
+    snapshotImg.src = tmpCanvas.toDataURL('image/jpeg');
+
+    stopLive();
+    canvas.style.display = 'block';
+    currentBbox = null;
+    document.getElementById('annot-status').textContent = 'Кадр захвачен — нарисуйте bbox';
+}
+
+// --- Bbox drawing ---
+canvas.addEventListener('mousedown', e => {
+    if (!snapshotImg || isLive) return;
+    const r = canvas.getBoundingClientRect();
+    const sx = canvas.width / r.width, sy = canvas.height / r.height;
+    startX = (e.clientX - r.left) * sx; startY = (e.clientY - r.top) * sy;
+    isDrawing = true;
+});
+
+canvas.addEventListener('mousemove', e => {
+    if (!isDrawing || !snapshotImg) return;
+    const r = canvas.getBoundingClientRect();
+    const sx = canvas.width / r.width, sy = canvas.height / r.height;
+    const cx = (e.clientX - r.left) * sx, cy = (e.clientY - r.top) * sy;
+    ctx.drawImage(snapshotImg, 0, 0);
+    ctx.strokeStyle = '#4fc3f7'; ctx.lineWidth = 2;
+    ctx.strokeRect(startX, startY, cx - startX, cy - startY);
+    ctx.fillStyle = 'rgba(79,195,247,0.15)';
+    ctx.fillRect(startX, startY, cx - startX, cy - startY);
+    currentBbox = [Math.round(Math.min(startX,cx)), Math.round(Math.min(startY,cy)),
+                   Math.round(Math.max(startX,cx)), Math.round(Math.max(startY,cy))];
+});
+
+canvas.addEventListener('mouseup', () => {
+    isDrawing = false;
+    if (currentBbox) document.getElementById('annot-status').textContent = `BBox: [${currentBbox.join(', ')}]`;
+});
+
+function clearBbox() {
+    if (snapshotImg) ctx.drawImage(snapshotImg, 0, 0);
+    currentBbox = null;
+}
+
+function resetToLive() {
+    const sid = document.getElementById('annot-stream-select').value;
+    if (sid) startLive(sid);
+}
+
+// --- Save annotation ---
+async function saveAnnotation() {
+    if (!currentBbox) { Toast.error('Нарисуйте bbox'); return; }
+    if (!snapshotImg) { Toast.error('Захватите кадр'); return; }
+    const tmpCanvas = document.createElement('canvas');
+    tmpCanvas.width = canvas.width; tmpCanvas.height = canvas.height;
+    tmpCanvas.getContext('2d').drawImage(snapshotImg, 0, 0);
+    const frameBase64 = tmpCanvas.toDataURL('image/jpeg', 0.9).split(',')[1];
+    try {
+        const r = await API.post(`/training/objects/${currentObjectId}/annotate`, { bbox: currentBbox, frame_base64: frameBase64 });
+        Toast.success(`Кадр #${r.index + 1} (всего: ${r.total_samples})`);
+        currentBbox = null;
+        snapshotImg = null;
+        await loadSamples();
+        const sid = document.getElementById('annot-stream-select').value;
+        if (sid) startLive(sid);
+    } catch (e) { Toast.error(e.message); }
+}
+
+// --- Samples ---
+async function loadSamples() {
+    try {
+        const r = await API.get(`/training/objects/${currentObjectId}/samples`);
+        document.getElementById('samples-count').textContent = `Кадров: ${r.total}`;
+        const list = document.getElementById('samples-list');
+        if (r.samples.length === 0) { list.innerHTML = '<div style="color:var(--text-secondary);font-size:13px">Нет кадров</div>'; return; }
+        list.innerHTML = r.samples.map((s, i) => `
+            <div style="margin-bottom:8px;position:relative">
+                <img src="data:image/jpeg;base64,${s.image}" style="width:100%;border-radius:4px;display:block">
+                <div style="position:absolute;top:4px;right:4px;display:flex;gap:4px">
+                    <span style="background:rgba(0,0,0,0.7);color:#fff;padding:2px 6px;border-radius:4px;font-size:11px">#${i+1}</span>
+                    <button onclick="deleteSample('${s.filename}')" style="background:rgba(239,83,80,0.8);color:#fff;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px">×</button>
+                </div>
+            </div>
+        `).join('');
+    } catch (e) { console.error(e); }
+}
+
+async function deleteSample(filename) {
+    try { await API.delete(`/training/objects/${currentObjectId}/samples/${filename}`); await loadSamples(); }
+    catch (e) { Toast.error(e.message); }
+}
+
+// --- Training ---
+async function startTraining() {
+    if (!currentObjectId) return;
+    const epochs = parseInt(document.getElementById('train-epochs').value) || 30;
+    const model = document.getElementById('train-model').value;
+    try {
+        await API.post(`/training/objects/${currentObjectId}/train`, { epochs, base_model: model });
+        Toast.success('Обучение начато');
+        document.getElementById('train-progress').style.display = '';
+        pollTrainingStatus();
+    } catch (e) { Toast.error(e.message); }
+}
+
+function pollTrainingStatus() {
+    if (trainPollTimer) clearInterval(trainPollTimer);
+    trainPollTimer = setInterval(async () => {
+        try {
+            const r = await API.get(`/training/objects/${currentObjectId}/status`);
+            document.getElementById('train-bar').style.width = r.progress + '%';
+            document.getElementById('train-status-text').textContent =
+                r.status==='training'?`${r.progress}%` : r.status==='ready'?'Готово!': r.status==='failed'?`Ошибка: ${r.error}`:r.status;
+            if (r.status==='ready'||r.status==='failed') { clearInterval(trainPollTimer); trainPollTimer=null; await loadObjects(); }
+        } catch (e) { console.error(e); }
+    }, 2000);
+}
+
+async function deleteObject(id) {
+    if (!confirm('Удалить объект и все кадры?')) return;
+    try {
+        await API.delete(`/training/objects/${id}`);
+        Toast.success('Удалён');
+        if (currentObjectId===id) { document.getElementById('annotation-section').style.display='none'; currentObjectId=null; stopLive(); }
+        await loadObjects();
+    } catch (e) { Toast.error(e.message); }
+}
+
+document.addEventListener('keydown', e => {
+    if (!currentObjectId) return;
+    const tag = e.target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+    if (e.code === 'Space') {
+        e.preventDefault();
+        if (isLive) captureCurrentFrame();
+    } else if (e.code === 'Enter') {
+        e.preventDefault();
+        if (currentBbox && !isLive) saveAnnotation();
+    } else if (e.code === 'Escape') {
+        e.preventDefault();
+        resetToLive();
+    }
+});
+
+async function loadModels() {
+    try {
+        const sys = await API.get('/stats/system');
+        const sel = document.getElementById('train-model');
+        sel.innerHTML = Object.entries(sys.models).map(([k, v]) =>
+            `<option value="${k}">${v.name} (${v.size})</option>`
+        ).join('');
+    } catch (e) { console.error(e); }
+}
+
+loadModels();
+loadObjects();
+</script>
+{% endblock %}

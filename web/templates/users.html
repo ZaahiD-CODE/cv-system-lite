@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Пользователи — CV System{% endblock %}
+{% block body %}
+<div class="app-layout">
+    <aside class="sidebar"></aside>
+    <main class="main-content">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+            <h2 id="page-title"></h2>
+            <button class="btn btn-primary" onclick="showModal('add-user-modal')" id="btn-add-user"></button>
+        </div>
+        <div class="card">
+            <div class="card-body">
+                <div class="table-container">
+                    <table>
+                        <thead><tr><th id="th-user"></th><th id="th-email"></th><th id="th-role"></th><th id="th-status"></th><th id="th-streams"></th><th id="th-actions"></th></tr></thead>
+                        <tbody id="users-table"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<div class="modal-overlay" id="add-user-modal">
+    <div class="modal">
+        <div class="modal-header"><h3 id="modal-add-title"></h3><button class="modal-close" onclick="hideModal('add-user-modal')">&times;</button></div>
+        <div class="modal-body">
+            <div class="form-group"><label id="lbl-new-user"></label><input type="text" id="new-username" class="form-control" required></div>
+            <div class="form-group"><label id="lbl-new-email"></label><input type="email" id="new-email" class="form-control" required></div>
+            <div class="form-group"><label id="lbl-new-pass"></label><input type="password" id="new-password" class="form-control" required></div>
+            <div class="form-group"><label id="lbl-new-role"></label>
+                <select id="new-role" class="form-control"><option value="operator" id="opt-operator"></option><option value="admin" id="opt-admin"></option></select>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="hideModal('add-user-modal')" id="btn-cancel"></button>
+            <button class="btn btn-primary" onclick="createUser()" id="btn-create"></button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="edit-user-modal">
+    <div class="modal">
+        <div class="modal-header"><h3 id="modal-edit-title"></h3><button class="modal-close" onclick="hideModal('edit-user-modal')">&times;</button></div>
+        <div class="modal-body">
+            <input type="hidden" id="edit-user-id">
+            <div class="form-group"><label id="lbl-edit-user"></label><input type="text" id="edit-username" class="form-control" required></div>
+            <div class="form-group"><label id="lbl-edit-email"></label><input type="email" id="edit-email" class="form-control" required></div>
+            <div class="form-group"><label id="lbl-edit-pass"></label><input type="password" id="edit-password" class="form-control"></div>
+            <div class="form-group"><label id="lbl-edit-role"></label>
+                <select id="edit-role" class="form-control"><option value="operator" id="opt-edit-operator"></option><option value="admin" id="opt-edit-admin"></option></select>
+            </div>
+            <div class="form-group"><label class="checkbox-label"><input type="checkbox" id="edit-active"> <span id="lbl-edit-active"></span></label></div>
+            <div class="form-group"><label id="lbl-edit-streams"></label><div id="edit-streams-checklist" class="checkbox-group"></div></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-danger" onclick="deleteCurrentUser()" id="btn-del"></button>
+            <button class="btn btn-secondary" onclick="hideModal('edit-user-modal')" id="btn-cancel2"></button>
+            <button class="btn btn-primary" onclick="updateUser()" id="btn-save"></button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+    if (!Auth.requireAdmin()) throw 'unauthorized';
+    initLayout();
+
+    // Apply translations
+    const L = {
+        'page-title': t('users'), 'btn-add-user': t('addUser'),
+        'th-user': t('username'), 'th-email': t('email'), 'th-role': t('role'),
+        'th-status': t('status'), 'th-streams': t('streams2'), 'th-actions': t('actions'),
+        'modal-add-title': t('addUser'), 'lbl-new-user': t('username'), 'lbl-new-email': t('email'),
+        'lbl-new-pass': t('password'), 'lbl-new-role': t('role'),
+        'opt-operator': t('operator'), 'opt-admin': getLang()==='ru'?'Администратор':'Administrator',
+        'btn-cancel': t('cancel'), 'btn-create': t('create'),
+        'modal-edit-title': getLang()==='ru'?'Редактировать пользователя':'Edit User',
+        'lbl-edit-user': t('username'), 'lbl-edit-email': t('email'),
+        'lbl-edit-pass': t('newPassword'), 'lbl-edit-role': t('role'),
+        'opt-edit-operator': t('operator'), 'opt-edit-admin': getLang()==='ru'?'Администратор':'Administrator',
+        'lbl-edit-active': t('active'), 'lbl-edit-streams': t('assignedStreams'),
+        'btn-del': t('delete'), 'btn-cancel2': t('cancel'), 'btn-save': t('save'),
+    };
+    Object.entries(L).forEach(([id, val]) => { const el = document.getElementById(id); if(el) el[val===undefined?'textContent':'textContent'] = val; });
+
+    let allStreams = [], allUsers = [];
+
+    async function loadUsers() {
+        allStreams = await API.get('/streams/');
+        allUsers = await API.get('/users/');
+        const tbody = document.getElementById('users-table');
+        tbody.innerHTML = allUsers.map(u => `
+            <tr>
+                <td>${u.username}</td>
+                <td>${u.email}</td>
+                <td><span class="badge badge-${u.role}">${u.role==='admin'?(getLang()==='ru'?'админ':'admin'):t('operator')}</span></td>
+                <td><span class="badge ${u.is_active?'badge-active':'badge-inactive'}">${u.is_active?t('active'):t('inactive')}</span></td>
+                <td>${u.stream_ids.length} ${t('streams2')}</td>
+                <td><button class="btn btn-secondary btn-sm" onclick="editUser(${u.id})">${t('edit')}</button></td>
+            </tr>
+        `).join('');
+    }
+
+    async function createUser() {
+        try {
+            await API.post('/users/', { username:document.getElementById('new-username').value, email:document.getElementById('new-email').value, password:document.getElementById('new-password').value, role:document.getElementById('new-role').value });
+            hideModal('add-user-modal'); Toast.success(getLang()==='ru'?'Пользователь создан':'User created'); loadUsers();
+        } catch(e){Toast.error(e.message);}
+    }
+
+    function editUser(id) {
+        const u = allUsers.find(x=>x.id===id); if(!u)return;
+        document.getElementById('edit-user-id').value=u.id;
+        document.getElementById('edit-username').value=u.username;
+        document.getElementById('edit-email').value=u.email;
+        document.getElementById('edit-role').value=u.role;
+        document.getElementById('edit-active').checked=u.is_active;
+        document.getElementById('edit-streams-checklist').innerHTML = allStreams.map(s =>
+            `<label class="checkbox-label"><input type="checkbox" value="${s.id}" ${u.stream_ids.includes(s.id)?'checked':''}> ${s.name}</label>`
+        ).join('');
+        showModal('edit-user-modal');
+    }
+
+    async function updateUser() {
+        const id=document.getElementById('edit-user-id').value;
+        const password=document.getElementById('edit-password').value;
+        const streamIds=Array.from(document.querySelectorAll('#edit-streams-checklist input:checked')).map(cb=>parseInt(cb.value));
+        const body={username:document.getElementById('edit-username').value,email:document.getElementById('edit-email').value,role:document.getElementById('edit-role').value,is_active:document.getElementById('edit-active').checked,stream_ids:streamIds};
+        if(password)body.password=password;
+        try{await API.put(`/users/${id}`,body);hideModal('edit-user-modal');Toast.success(getLang()==='ru'?'Пользователь обновлён':'User updated');loadUsers();}catch(e){Toast.error(e.message);}
+    }
+
+    async function deleteCurrentUser() {
+        const id=document.getElementById('edit-user-id').value;
+        if(!confirm(getLang()==='ru'?'Удалить пользователя?':'Delete user?'))return;
+        try{await API.delete(`/users/${id}`);hideModal('edit-user-modal');Toast.success(getLang()==='ru'?'Пользователь удалён':'User deleted');loadUsers();}catch(e){Toast.error(e.message);}
+    }
+
+    loadUsers();
+</script>
+{% endblock %}

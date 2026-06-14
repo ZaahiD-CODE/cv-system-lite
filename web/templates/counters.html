@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Счётчики — CV System{% endblock %}
+{% block body %}
+<div class="app-layout">
+    <aside class="sidebar"></aside>
+    <main class="main-content">
+        <h2 style="margin-bottom:24px" id="page-title"></h2>
+        <div id="counters-content">
+            <div class="empty-state">
+                <div class="icon">🔢</div>
+                <h4 id="lbl-no-counters"></h4>
+                <p id="lbl-hint"></p>
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+    if (!Auth.requireAuth()) throw 'unauthorized';
+    initLayout();
+    document.getElementById('page-title').textContent = t('counters');
+    document.getElementById('lbl-no-counters').textContent = t('noCounters');
+    document.getElementById('lbl-hint').textContent = getLang()==='ru'?'Добавьте счётчики к потокам для подсчёта объектов':'Add counters to streams to count objects';
+
+    async function loadCounters() {
+        try {
+            const counters = await API.get('/stats/counters');
+            const container = document.getElementById('counters-content');
+            if (counters.length === 0) {
+                container.innerHTML = `<div class="empty-state"><div class="icon">🔢</div><h4>${t('noCounters')}</h4></div>`;
+                return;
+            }
+            const grouped = {};
+            counters.forEach(c => { if (!grouped[c.stream_name]) grouped[c.stream_name] = []; grouped[c.stream_name].push(c); });
+            container.innerHTML = Object.entries(grouped).map(([stream, ctrs]) => `
+                <div class="card" style="margin-bottom:16px">
+                    <div class="card-header"><h3>${stream}</h3></div>
+                    <div class="card-body">
+                        <div class="table-container">
+                            <table>
+                                <thead><tr><th>${t('name')}</th><th>${t('type')}</th><th>${getLang()==='ru'?'Текущее':'Current'}</th><th>${getLang()==='ru'?'Всего':'Total'}</th><th>${getLang()==='ru'?'Фильтр классов':'Class Filter'}</th></tr></thead>
+                                <tbody>
+                                    ${ctrs.map(c => `
+                                        <tr>
+                                            <td>${c.counter_name}</td>
+                                            <td><span class="badge badge-operator">${c.type==='zone'?t('zoneType'):t('lineType')}</span></td>
+                                            <td style="font-size:20px;font-weight:600;color:var(--accent)">${c.current_count}</td>
+                                            <td>${c.total_count}</td>
+                                            <td>${c.class_filter ? c.class_filter.join(', ') : t('allClassFilter')}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        } catch (err) { console.error(err); }
+    }
+    loadCounters();
+    setInterval(loadCounters, 5000);
+</script>
+{% endblock %}

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Панель управления — CV System{% endblock %}
+{% block body %}
+<div class="app-layout">
+    <aside class="sidebar"></aside>
+    <main class="main-content">
+        <h2 style="margin-bottom:24px" id="dash-title"></h2>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label" id="lbl-streams"></div>
+                <div class="stat-value accent" id="stat-streams">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label" id="lbl-active"></div>
+                <div class="stat-value success" id="stat-active">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label" id="lbl-counters"></div>
+                <div class="stat-value info" id="stat-counters">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label" id="lbl-detections"></div>
+                <div class="stat-value warning" id="stat-detections">-</div>
+            </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div class="card">
+                <div class="card-header"><h3 id="lbl-top-objects"></h3></div>
+                <div class="card-body"><div id="top-classes"><div class="empty-state"><p id="lbl-no-data"></p></div></div></div>
+            </div>
+            <div class="card">
+                <div class="card-header"><h3 id="lbl-stream-counters"></h3></div>
+                <div class="card-body"><div id="stream-counters"><div class="empty-state"><p id="lbl-no-counters"></p></div></div></div>
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+    if (!Auth.requireAuth()) throw 'unauthorized';
+    initLayout();
+    document.getElementById('dash-title').textContent = t('dashboard');
+    document.getElementById('lbl-streams').textContent = t('totalStreams');
+    document.getElementById('lbl-active').textContent = t('activeStreams');
+    document.getElementById('lbl-counters').textContent = t('totalCounters');
+    document.getElementById('lbl-detections').textContent = t('todayDetections');
+    document.getElementById('lbl-top-objects').textContent = getLang()==='ru'?'Популярные объекты':'Top Objects';
+    document.getElementById('lbl-stream-counters').textContent = getLang()==='ru'?'Счётчики потоков':'Stream Counters';
+    document.getElementById('lbl-no-data').textContent = t('noData');
+    document.getElementById('lbl-no-counters').textContent = t('noCounters');
+
+    async function loadDashboard() {
+        try {
+            const stats = await API.get('/stats/dashboard');
+            document.getElementById('stat-streams').textContent = stats.total_streams;
+            document.getElementById('stat-active').textContent = stats.active_streams;
+            document.getElementById('stat-counters').textContent = stats.total_counters;
+            document.getElementById('stat-detections').textContent = stats.today_detections;
+            const topClasses = document.getElementById('top-classes');
+            if (stats.top_classes.length > 0) {
+                topClasses.innerHTML = stats.top_classes.map(c => `
+                    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+                        <span>${c.class_name}</span>
+                        <span style="color:var(--accent);font-weight:600">${c.count}</span>
+                    </div>
+                `).join('');
+            }
+        } catch (err) { console.error(err); }
+        try {
+            const streamStats = await API.get('/stats/streams');
+            const container = document.getElementById('stream-counters');
+            if (streamStats.length > 0) {
+                container.innerHTML = streamStats.map(s => `
+                    <div style="margin-bottom:16px">
+                        <div style="font-weight:500;margin-bottom:8px">${s.stream_name}</div>
+                        ${s.counters.length > 0 ? s.counters.map(c => `
+                            <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;color:var(--text-secondary)">
+                                <span>${c.counter_name} (${c.type})</span>
+                                <span style="color:var(--accent)">${c.current_count}</span>
+                            </div>
+                        `).join('') : `<div style="font-size:13px;color:var(--text-secondary)">${t('noCounters')}</div>`}
+                    </div>
+                `).join('');
+            }
+        } catch (err) { console.error(err); }
+    }
+    loadDashboard();
+</script>
+{% endblock %}

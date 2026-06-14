@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+{% block title %}Система — CV System{% endblock %}
+{% block body %}
+<style>
+.sys-tabs { display:flex; gap:0; margin-bottom:24px; border-bottom:2px solid var(--border); }
+.sys-tab { padding:12px 24px; background:none; border:none; border-bottom:2px solid transparent; color:var(--text-secondary); cursor:pointer; font-size:14px; font-weight:500; margin-bottom:-2px; transition:all 0.2s; }
+.sys-tab:hover { color:var(--text-primary); background:var(--bg-hover); }
+.sys-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+.metric-bar { display:flex; align-items:center; gap:12px; margin-bottom:10px; }
+.metric-bar-label { width:70px; font-size:12px; color:var(--text-secondary); text-align:right; }
+.metric-bar-track { flex:1; height:8px; background:var(--bg-primary); border-radius:4px; overflow:hidden; }
+.metric-bar-fill { height:100%; border-radius:4px; transition:width 0.5s ease; }
+.metric-bar-value { width:45px; font-size:12px; font-weight:600; text-align:right; }
+#network-chart { width:100%; height:220px; display:block; border-radius:4px; }
+</style>
+<div class="app-layout">
+    <aside class="sidebar"></aside>
+    <main class="main-content">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+            <h2>Система</h2>
+            <div id="sys-uptime" style="font-size:12px;color:var(--text-secondary)"></div>
+        </div>
+
+        <div class="sys-tabs">
+            <button class="sys-tab active" onclick="switchSysTab('general',this)" id="tab-general-btn"></button>
+            <button class="sys-tab" onclick="switchSysTab('metrics',this)" id="tab-metrics-btn"></button>
+            <button class="sys-tab" onclick="switchSysTab('logs',this)" id="tab-logs-btn"></button>
+        </div>
+
+        <div id="tab-general">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                <div class="card">
+                    <div class="card-header"><h3 id="lbl-server"></h3></div>
+                    <div class="card-body">
+                        <p style="color:var(--text-secondary);margin-bottom:16px" id="lbl-restart-hint"></p>
+                        <button class="btn btn-danger" onclick="restartServer()" id="btn-restart"></button>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><h3 id="lbl-appearance"></h3></div>
+                    <div class="card-body">
+                        <div class="form-group"><label id="lbl-theme"></label>
+                            <select id="theme-select" class="form-control" onchange="setTheme(this.value)">
+                                <option value="dark" id="opt-dark"></option>
+                                <option value="light" id="opt-light"></option>
+                                <option value="system" id="opt-system"></option>
+                            </select>
+                        </div>
+                        <div class="form-group"><label id="lbl-lang"></label>
+                            <select id="lang-select" class="form-control" onchange="setLang(this.value)">
+                                <option value="ru">Русский</option>
+                                <option value="en">English</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card" style="margin-top:16px">
+                <div class="card-header"><h3 id="lbl-custom-models"></h3>
+                    <button class="btn btn-secondary btn-sm" onclick="cleanupTrainingDirs()" id="btn-cleanup"></button>
+                </div>
+                <div class="card-body"><div id="custom-models-list"><div style="color:var(--text-secondary)" id="lbl-loading"></div></div></div>
+            </div>
+        </div>
+
+        <div id="tab-metrics" style="display:none">
+            <div class="stats-grid" id="metrics-stats"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+                <div class="card">
+                    <div class="card-header"><h3 id="lbl-cpu-cores"></h3></div>
+                    <div class="card-body"><div id="cpu-cores"></div></div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><h3 id="lbl-net-chart"></h3></div>
+                    <div class="card-body" style="padding:12px 0 0 0"><canvas id="network-chart" style="width:100%;display:block"></canvas></div>
+                </div>
+            </div>
+            <div class="card" style="margin-top:16px;display:none" id="gpu-card">
+                <div class="card-header"><h3>GPU</h3></div>
+                <div class="card-body"><div id="gpu-info"></div></div>
+            </div>
+        </div>
+
+        <div id="tab-logs" style="display:none">
+            <div class="card">
+                <div class="card-header"><h3 id="lbl-sys-logs"></h3>
+                    <button class="btn btn-secondary btn-sm" onclick="loadLogs()" id="btn-refresh"></button>
+                </div>
+                <div class="card-body">
+                    <div id="logs-content" style="max-height:600px;overflow-y:auto;font-family:monospace;font-size:12px;line-height:1.6;color:var(--text-secondary);white-space:pre-wrap">Загрузка...</div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+if (!Auth.requireAdmin()) throw 'unauthorized';
+initLayout();
+
+// Apply translations
+const SL = {
+    'tab-general-btn': t('general'), 'tab-metrics-btn': t('metrics'), 'tab-logs-btn': t('logs'),
+    'lbl-server': t('server'), 'lbl-restart-hint': getLang()==='ru'?'Перезапуск сервиса CV System':'Restart CV System service',
+    'btn-restart': t('restartServer'), 'lbl-appearance': t('appearance'),
+    'lbl-theme': t('theme'), 'opt-dark': t('dark'), 'opt-light': t('light'), 'opt-system': t('sysTheme'),
+    'lbl-lang': t('language'), 'lbl-custom-models': t('customModels'), 'btn-cleanup': t('cleanup'),
+    'lbl-loading': getLang()==='ru'?'Загрузка...':'Loading...',
+    'lbl-cpu-cores': t('cpuCores'), 'lbl-net-chart': t('netTraffic'),
+    'lbl-sys-logs': t('systemLogs'), 'btn-refresh': t('refresh'),
+};
+Object.entries(SL).forEach(([id, val]) => { const el = document.getElementById(id); if(el) el.textContent = val; });
+
+let metricsTimer = null;
+let netHistory = [];
+let netPrevBytes = null;
+let netPrevTime = null;
+const NET_MAX_POINTS = 60;
+const NET_INTERVAL = 2;
+
+function switchSysTab(tab, btn) {
+    document.querySelectorAll('.sys-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    ['general','metrics','logs'].forEach(t => document.getElementById('tab-'+t).style.display = t===tab?'':'none');
+    if (metricsTimer) { clearInterval(metricsTimer); metricsTimer = null; }
+    if (tab==='metrics') { loadMetrics(); metricsTimer = setInterval(loadMetrics, 2000); }
+    if (tab==='logs') loadLogs();
+}
+
+// --- General ---
+async function restartServer() {
+    if (!confirm(t('restartConfirm'))) return;
+    try { await API.post('/system/restart'); Toast.info(getLang()==='ru'?'Перезапуск...':'Restarting...'); setTimeout(()=>location.reload(), 5000); }
+    catch(e) { Toast.error(e.message); }
+}
+
+function setTheme(theme) { localStorage.setItem('theme', theme); applyTheme(theme); }
+
+function setLang(lang) {
+    localStorage.setItem('lang', lang);
+    location.reload();
+}
+
+document.getElementById('theme-select').value = localStorage.getItem('theme') || 'dark';
+document.getElementById('lang-select').value = localStorage.getItem('lang') || 'ru';
+
+async function loadCustomModels() {
+    try {
+        const models = await API.get('/system/custom-models');
+        const list = document.getElementById('custom-models-list');
+        if (models.length===0) { list.innerHTML = `<div style="color:var(--text-secondary)">${t('noCustomModels')}</div>`; return; }
+        list.innerHTML = models.map(m => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+                <div><strong>${m.filename}</strong>
+                    <span style="color:var(--text-secondary);font-size:12px;margin-left:8px">${m.size_mb} MB</span>
+                    ${m.object_name?`<span style="color:var(--accent);font-size:12px;margin-left:8px">${m.object_name}</span>`:''}
+                </div>
+                <button class="btn btn-danger btn-sm" onclick="deleteModel('${m.filename}')">${t('delete')}</button>
+            </div>
+        `).join('');
+    } catch(e) { console.error(e); }
+}
+async function deleteModel(fn) { if(!confirm(`${t('deleteModelConfirm')} ${fn}?`))return; try{await API.delete(`/system/custom-models/${fn}`);Toast.success(getLang()==='ru'?'Удалено':'Deleted');loadCustomModels();}catch(e){Toast.error(e.message);} }
+async function cleanupTrainingDirs() { try{const r=await API.post('/system/custom-models/cleanup');Toast.success(r.message);loadCustomModels();}catch(e){Toast.error(e.message);} }
+loadCustomModels();
+
+// --- Metrics ---
+function bar(label, value, max, color) {
+    const pct = Math.min(100, Math.round(value/max*100));
+    return `<div class="metric-bar">
+        <span class="metric-bar-label">${label}</span>
+        <div class="metric-bar-track"><div class="metric-bar-fill" style="width:${pct}%;background:${pct>80?'var(--warning)':color||'var(--accent)'}"></div></div>
+        <span class="metric-bar-value">${pct}%</span>
+    </div>`;
+}
+
+async function loadMetrics() {
+    try {
+        const m = await API.get('/system/metrics');
+        document.getElementById('metrics-stats').innerHTML = `
+            <div class="stat-card"><div class="stat-label">CPU</div><div class="stat-value ${m.cpu.percent_total>80?'warning':'success'}">${m.cpu.percent_total}%</div><div style="font-size:12px;color:var(--text-secondary)">${m.cpu.cores_logical} ядер @ ${m.cpu.freq_current_mhz||'?'} МГц</div></div>
+            <div class="stat-card"><div class="stat-label">RAM</div><div class="stat-value ${m.memory.percent>80?'warning':'accent'}">${m.memory.percent}%</div><div style="font-size:12px;color:var(--text-secondary)">${m.memory.used_mb}/${m.memory.total_mb} MB</div></div>
+            <div class="stat-card"><div class="stat-label">Диск</div><div class="stat-value ${m.disk.percent>80?'warning':'info'}">${m.disk.percent}%</div><div style="font-size:12px;color:var(--text-secondary)">${m.disk.used_gb}/${m.disk.total_gb} GB</div></div>
+            <div class="stat-card"><div class="stat-label">Сеть</div><div class="stat-value accent">↑${m.network.bytes_sent_mb}MB</div><div style="font-size:12px;color:var(--text-secondary)">↓${m.network.bytes_recv_mb}MB</div></div>
+        `;
+        document.getElementById('cpu-cores').innerHTML = m.cpu.percent_per_core.map((p,i) => bar(`Ядро ${i}`, p, 100)).join('');
+
+        // Network chart - calculate speed (KB/s) from raw bytes
+        const now = Date.now();
+        if (netPrevBytes !== null) {
+            const dt = (now - netPrevTime) / 1000;
+            if (dt > 0) {
+                const downSpeed = Math.max(0, (m.network.bytes_recv - netPrevBytes.recv) / 1024 / dt);
+                const upSpeed = Math.max(0, (m.network.bytes_sent - netPrevBytes.sent) / 1024 / dt);
+                netHistory.push({ t: now, down: downSpeed, up: upSpeed });
+                if (netHistory.length > NET_MAX_POINTS) netHistory.shift();
+            }
+        }
+        netPrevBytes = { recv: m.network.bytes_recv, sent: m.network.bytes_sent };
+        netPrevTime = now;
+        drawNetChart();
+
+        const gpuCard = document.getElementById('gpu-card');
+        if (m.gpu) {
+            gpuCard.style.display = '';
+            const gPct = Math.round(m.gpu.memory_used_mb / m.gpu.memory_total_mb * 100);
+            document.getElementById('gpu-info').innerHTML = `
+                <div style="margin-bottom:12px;font-weight:500">${m.gpu.name}</div>
+                ${bar('VRAM', m.gpu.memory_used_mb, m.gpu.memory_total_mb, 'var(--accent)')}
+                <div style="display:flex;gap:24px;margin-top:12px;font-size:13px;color:var(--text-secondary)">
+                    <span>Использовано: ${m.gpu.memory_used_mb} MB</span>
+                    <span>Свободно: ${m.gpu.memory_free_mb} MB</span>
+                    <span>Всего: ${m.gpu.memory_total_mb} MB</span>
+                </div>
+            `;
+        } else { gpuCard.style.display = 'none'; }
+    } catch(e) { console.error(e); }
+}
+
+function drawNetChart() {
+    const canvas = document.getElementById('network-chart');
+    if (!canvas || netHistory.length < 2) return;
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const W = canvas.parentElement.clientWidth;
+    const H = 220;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.scale(dpr, dpr);
+
+    const padL = 20, padR = 20, padT = 50, padB = 25;
+    const gw = W - padL - padR;
+    const gh = H - padT - padB;
+
+    // Background
+    ctx.clearRect(0, 0, W, H);
+
+    const maxSpeed = Math.max(10, ...netHistory.map(d => Math.max(d.down, d.up)));
+    const niceMax = Math.ceil(maxSpeed / 10) * 10;
+
+    // Horizontal grid lines (subtle)
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1;
+    for (let i = 1; i <= 4; i++) {
+        const y = padT + (gh / 4) * i;
+        ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + gw, y); ctx.stroke();
+    }
+
+    function drawSmoothLine(data, key) {
+        const points = data.map((d, i) => ({
+            x: padL + (gw / (data.length - 1)) * i,
+            y: padT + gh - (Math.min(d[key], niceMax) / niceMax) * gh
+        }));
+
+        // Smooth curve using cardinal spline
+        function getSplinePoints(pts) {
+            if (pts.length < 2) return pts;
+            const result = [];
+            for (let i = 0; i < pts.length - 1; i++) {
+                const p0 = pts[Math.max(0, i - 1)];
+                const p1 = pts[i];
+                const p2 = pts[i + 1];
+                const p3 = pts[Math.min(pts.length - 1, i + 2)];
+                for (let t = 0; t <= 1; t += 0.1) {
+                    const t2 = t * t, t3 = t2 * t;
+                    const x = 0.5 * ((2*p1.x) + (-p0.x+p2.x)*t + (2*p0.x-5*p1.x+4*p2.x-p3.x)*t2 + (-p0.x+3*p1.x-3*p2.x+p3.x)*t3);
+                    const y = 0.5 * ((2*p1.y) + (-p0.y+p2.y)*t + (2*p0.y-5*p1.y+4*p2.y-p3.y)*t2 + (-p0.y+3*p1.y-3*p2.y+p3.y)*t3);
+                    result.push({x, y});
+                }
+            }
+            result.push(pts[pts.length - 1]);
+            return result;
+        }
+
+        return getSplinePoints(points);
+    }
+
+    function fillArea(points, color, alpha) {
+        if (points.length < 2) return;
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+        ctx.lineTo(points[points.length - 1].x, padT + gh);
+        ctx.lineTo(points[0].x, padT + gh);
+        ctx.closePath();
+        const grad = ctx.createLinearGradient(0, padT, 0, padT + gh);
+        grad.addColorStop(0, color + Math.round(alpha * 255).toString(16).padStart(2, '0'));
+        grad.addColorStop(1, color + '03');
+        ctx.fillStyle = grad;
+        ctx.fill();
+    }
+
+    function strokeLine(points, color, width) {
+        if (points.length < 2) return;
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+    }
+
+    const downPts = drawSmoothLine(netHistory, 'down');
+    const upPts = drawSmoothLine(netHistory, 'up');
+
+    fillArea(downPts, '#4fc3f7', 0.2);
+    fillArea(upPts, '#66bb6a', 0.15);
+    strokeLine(downPts, '#4fc3f7', 2.5);
+    strokeLine(upPts, '#66bb6a', 2);
+
+    // Legend (top-left)
+    const last = netHistory[netHistory.length - 1];
+    const fmt = (v) => v >= 1024 ? (v/1024).toFixed(1) + ' MB/s' : Math.round(v) + ' KB/s';
+
+    ctx.font = '600 13px -apple-system, sans-serif'; ctx.textAlign = 'left';
+
+    // Download
+    ctx.fillStyle = '#4fc3f7';
+    ctx.beginPath(); ctx.arc(padL + 8, 18, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#e8eaed';
+    ctx.fillText(`${t('recv')}  ${fmt(last.down)}`, padL + 20, 23);
+
+    ctx.fillStyle = '#66bb6a';
+    ctx.beginPath(); ctx.arc(padL + 200, 18, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#e8eaed';
+    ctx.fillText(`${t('send')}  ${fmt(last.up)}`, padL + 212, 23);
+
+    // Scale label
+    ctx.font = '11px -apple-system, sans-serif';
+    ctx.fillStyle = '#6b7280'; ctx.textAlign = 'right';
+    ctx.fillText(niceMax >= 1024 ? (niceMax/1024).toFixed(1) + ' MB/s' : niceMax + ' KB/s', padL + gw, padT - 5);
+}
+
+// --- Logs ---
+async function loadLogs() {
+    try {
+        const r = await API.get('/system/logs?lines=300');
+        const div = document.getElementById('logs-content');
+        div.textContent = r.logs.length ? r.logs.join('\n') : 'Логи не найдены';
+        div.scrollTop = div.scrollHeight;
+    } catch(e) { document.getElementById('logs-content').textContent = 'Ошибка загрузки: ' + e.message; }
+}
+</script>
+{% endblock %}

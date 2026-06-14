@@ -1,0 +1,24 @@
+pipeline:
+  source_type: "video"
+  source_path: "0"
+  detector:
+    model: "yolov8n.pt"
+    confidence: 0.5
+    device: "cpu"
+    input_size: 640
+  tracker:
+    type: "botsort"
+    track_thresh: 0.5
+    match_thresh: 0.8
+    max_age: 30
+    min_hits: 3
+    iou_threshold: 0.3
+  counter:
+    mode: "zone"
+    zones: []
+    min_object_size: 50
+  output:
+    show: true
+    save: false
+    output_path: "output/"
+    codec: "mp4v"
