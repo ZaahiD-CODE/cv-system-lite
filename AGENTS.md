@@ -5,7 +5,7 @@
 Real-time object detection, tracking, and counting system. Python backend (FastAPI + YOLO12 + OpenCV), Jinja2 frontend, SQLite database.
 
 **Repo**: `/root/cv_system/`
-**Domain**: `vision.vlesssec.ru`
+**Domain**: задаётся при установке в `.env` (`CORS_ORIGINS`)
 **Default admin**: `admin` / password in `.env` (`CV_ADMIN_PASSWORD`)
 
 ## Commands
