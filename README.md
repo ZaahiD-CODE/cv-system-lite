@@ -24,18 +24,24 @@ cv_system/
 │   ├── sources/           # RTSP, камера, видеофайл
 │   ├── analytics/         # Сбор статистики
 │   ├── visualization/     # Отрисовка bbox, зон, линий
-│   └── training_engine.py # Движок обучения YOLO
+│   ├── pipeline.py        # Основной CV-пайплайн
+│   ├── training_engine.py # Движок обучения YOLO
+│   └── utils/             # Конфигурация, утилиты
 ├── web/
-│   ├── app.py             # FastAPI сервер
+│   ├── app.py             # FastAPI сервер, MJPEG, WebSocket
 │   ├── auth.py            # JWT аутентификация
-│   ├── database.py        # SQLAlchemy модели
+│   ├── database.py        # SQLAlchemy модели + миграции
 │   ├── routers/           # API endpoints
 │   ├── templates/         # Jinja2 HTML шаблоны
-│   └── static/            # CSS, JS
-├── datasets/              # Датасеты для обучения
-├── models/                # Скачанные и обученные модели
+│   └── static/            # CSS, JS (app.js — i18n, тема, авторизация)
 ├── configs/               # YAML конфигурации
-├── install.sh             # Скрипт установки
+├── models/                # Скачанные и обученные модели (.gitignore)
+├── datasets/              # Датасеты для обучения (.gitignore)
+├── install.sh             # Скрипт установки (venv, модели, .env, nginx, SSL)
+├── run_web.py             # Точка входа (авто-загрузка .env)
+├── test_all.py            # Юнит-тесты
+├── test_integration.py    # Интеграционные тесты
+├── test_web.py            # API-тесты
 └── requirements.txt
 ```
 
@@ -56,7 +62,16 @@ chmod +x install.sh
 ./install.sh
 ```
 
-Скрипт создаст `.env` с автоматически сгенерированными секретами. Пароль админа будет показан один раз при установке.
+Скрипт установки:
+1. Создаёт виртуальное окружение и устанавливает зависимости
+2. Скачивает модели YOLO12
+3. Генерирует `.env` с секретами (JWT, пароль админа)
+4. Спрашивает домен — если указан, предлагает автоматически настроить:
+   - Nginx reverse proxy с WebSocket
+   - Let's Encrypt SSL-сертификат
+   - Systemd-сервис `cv-system`
+
+Пароль админа показывается один раз при установке — сохраните его.
 
 ### Ручная установка
 
@@ -93,16 +108,6 @@ python3 -c "import torch; print(torch.cuda.is_available())"
 
 Система автоматически обнаружит GPU и переключит детекцию на `cuda:0`.
 
-## Запуск
-
-```bash
-source venv/bin/activate
-export $(grep -v '^#' .env | xargs)
-python3 run_web.py
-```
-
-Веб-интерфейс: `http://localhost:8000`
-
 ### Переменные окружения (`.env`)
 
 | Переменная | Описание | Default |
@@ -111,25 +116,62 @@ python3 run_web.py
 | `CV_ADMIN_PASSWORD` | Пароль админа | генерируется при установке |
 | `CORS_ORIGINS` | Разрешённые origins через запятую | `http://localhost:8000` |
 
-### Как systemd-сервис
+## Запуск
+
+### Локально (разработка)
 
 ```bash
-sudo cp cv-system.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now cv-system
+source venv/bin/activate
+python3 run_web.py
 ```
 
-Файл сервиса должен загружать переменные из `.env`:
-```ini
+`run_web.py` автоматически загружает переменные из `.env` при старте.
+Веб-интерфейс: `http://localhost:8000`
+
+### Как systemd-сервис
+
+Если при установке был указан домен, сервис уже настроен. Управление:
+
+```bash
+systemctl start cv-system
+systemctl stop cv-system
+systemctl restart cv-system
+systemctl status cv-system
+journalctl -u cv-system -f   # логи в реальном времени
+```
+
+Для ручной настройки без домена:
+
+```bash
+cat > /etc/systemd/system/cv-system.service <<EOF
+[Unit]
+Description=CV System
+After=network.target
+
 [Service]
+Type=simple
+User=root
+WorkingDirectory=/root/cv_system
 EnvironmentFile=/root/cv_system/.env
+ExecStart=/root/cv_system/venv/bin/python3 /root/cv_system/run_web.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now cv-system
 ```
 
 ### С HTTPS (Let's Encrypt)
 
+При установке с указанием домена настраивается автоматически. Для ручной настройки:
+
 ```bash
 sudo apt install nginx certbot python3-certbot-nginx
-sudo cp nginx-cv-system.conf /etc/nginx/sites-available/cv-system
+sudo nano /etc/nginx/sites-available/cv-system  # конфиг nginx
 sudo ln -s /etc/nginx/sites-available/cv-system /etc/nginx/sites-enabled/
 sudo certbot --nginx -d your-domain.com
 sudo systemctl restart nginx
@@ -215,6 +257,16 @@ pipeline:
     min_hits: 3
   counter:
     mode: "zone"
+```
+
+## Тесты
+
+```bash
+source venv/bin/activate
+
+python3 test_all.py         # Юнит-тесты (детектор, трекер, счётчик, источник, аналитика)
+python3 test_integration.py # Интеграционные (конфиг, потоки, пайплайн)
+python3 test_web.py         # API-тесты (FastAPI TestClient)
 ```
 
 ## Технологии
