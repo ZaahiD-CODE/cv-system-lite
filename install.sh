@@ -73,7 +73,7 @@ if [ ! -f "$ENV_FILE" ]; then
     ADMIN_PASS=$(python3 -c "import secrets; print(secrets.token_urlsafe(16))")
 
     echo ""
-    read -rp "Enter your domain (e.g. vision.vlesssec.ru) [leave empty for localhost only]: " DOMAIN
+    read -rp "Enter your domain (e.g. vision.example.com) [leave empty for localhost only]: " DOMAIN
     if [ -z "$DOMAIN" ]; then
         CORS_ORIGINS="http://localhost:8000"
         echo "No domain set — CORS will allow localhost only"
