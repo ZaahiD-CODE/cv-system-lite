@@ -109,7 +109,7 @@ python3 run_web.py
 |-----------|----------|---------|
 | `JWT_SECRET_KEY` | Секрет для JWT-токенов | генерируется при установке |
 | `CV_ADMIN_PASSWORD` | Пароль админа | генерируется при установке |
-| `CORS_ORIGINS` | Разрешённые origins через запятую | `https://vision.vlesssec.ru,http://localhost:8000` |
+| `CORS_ORIGINS` | Разрешённые origins через запятую | `http://localhost:8000` |
 
 ### Как systemd-сервис
 

@@ -71,10 +71,21 @@ ENV_FILE=".env"
 if [ ! -f "$ENV_FILE" ]; then
     JWT_SECRET=$(python3 -c "import secrets; print(secrets.token_hex(32))")
     ADMIN_PASS=$(python3 -c "import secrets; print(secrets.token_urlsafe(16))")
+
+    echo ""
+    read -rp "Enter your domain (e.g. vision.vlesssec.ru) [leave empty for localhost only]: " DOMAIN
+    if [ -z "$DOMAIN" ]; then
+        CORS_ORIGINS="http://localhost:8000"
+        echo "No domain set — CORS will allow localhost only"
+    else
+        CORS_ORIGINS="https://$DOMAIN,http://localhost:8000"
+        echo "CORS origins: $CORS_ORIGINS"
+    fi
+
     cat > "$ENV_FILE" <<EOF
 JWT_SECRET_KEY=$JWT_SECRET
 CV_ADMIN_PASSWORD=$ADMIN_PASS
-CORS_ORIGINS=https://vision.vlesssec.ru,http://localhost:8000
+CORS_ORIGINS=$CORS_ORIGINS
 EOF
     chmod 600 "$ENV_FILE"
     echo ""

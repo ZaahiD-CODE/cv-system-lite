@@ -21,7 +21,7 @@ from web.routers import auth_router, streams_router, users_router, training_rout
 
 app = FastAPI(title="CV System", version="1.0.0")
 
-ALLOWED_ORIGINS = os.environ.get("CORS_ORIGINS", "https://vision.vlesssec.ru,http://localhost:8000").split(",")
+ALLOWED_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:8000").split(",")
 
 app.add_middleware(
     CORSMiddleware,
