@@ -273,14 +273,6 @@ python3 test_integration.py # Интеграционные (конфиг, пот
 python3 test_web.py         # API-тесты (FastAPI TestClient)
 ```
 
-## Безопасность
-
-- Все секреты через переменные окружения (`.env`), не в коде
-- JWT-аутентификация с ролями (admin/operator)
-- XSS-защита: `sanitize()` экранирует пользовательский ввод в HTML
-- Path traversal-защита: валидация имён файлов в API
-- `.env` с `chmod 600`, в `.gitignore`
-
 ## Технологии
 
 - **Backend**: Python, FastAPI, SQLAlchemy, SQLite
