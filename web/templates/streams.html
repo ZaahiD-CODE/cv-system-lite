@@ -193,14 +193,14 @@ async function loadStreams() {
         return `
         <div class="stream-card" data-id="${s.id}">
             <div class="stream-preview">
-                ${s.is_active ? `<img src="/api/stream/${s.id}/mjpeg" alt="${s.name}" loading="lazy">` : `<div class="no-signal"><span style="font-size:32px">⏸</span><span>Неактивен</span></div>`}
+                ${s.is_active ? `<img src="/api/stream/${s.id}/mjpeg" alt="${sanitize(s.name)}" loading="lazy">` : `<div class="no-signal"><span style="font-size:32px">⏸</span><span>Неактивен</span></div>`}
             </div>
             <div class="stream-info">
-                <div style="display:flex;justify-content:space-between;align-items:center"><h4>${s.name}</h4><span class="badge ${s.is_active?'badge-active':'badge-inactive'}">${s.is_active?'Активен':'Неактивен'}</span></div>
-                <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">${s.source_type}: ${s.source_path}</div>
-                ${zones.length>0?`<div style="margin-top:6px;font-size:12px;color:var(--text-secondary)">Зоны: ${zones.map(z=>z.name).join(', ')}</div>`:''}
-                ${lines.length>0?`<div style="margin-top:2px;font-size:12px;color:var(--text-secondary)">Линии: ${lines.map(l=>l.name).join(', ')}</div>`:''}
-                <div class="stream-counters">${counters.map(c=>`<div class="counter-badge"><span>${c.name}</span><span class="count">${c.current_count}</span></div>`).join('')}</div>
+                <div style="display:flex;justify-content:space-between;align-items:center"><h4>${sanitize(s.name)}</h4><span class="badge ${s.is_active?'badge-active':'badge-inactive'}">${s.is_active?'Активен':'Неактивен'}</span></div>
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">${sanitize(s.source_type)}: ${sanitize(s.source_path)}</div>
+                ${zones.length>0?`<div style="margin-top:6px;font-size:12px;color:var(--text-secondary)">Зоны: ${zones.map(z=>sanitize(z.name)).join(', ')}</div>`:''}
+                ${lines.length>0?`<div style="margin-top:2px;font-size:12px;color:var(--text-secondary)">Линии: ${lines.map(l=>sanitize(l.name)).join(', ')}</div>`:''}
+                <div class="stream-counters">${counters.map(c=>`<div class="counter-badge"><span>${sanitize(c.name)}</span><span class="count">${c.current_count}</span></div>`).join('')}</div>
                 ${Auth.isAdmin()?`<div style="margin-top:12px;display:flex;gap:8px"><button class="btn btn-secondary btn-sm" onclick="editStream(${s.id})">Изменить</button><button class="btn btn-secondary btn-sm" onclick="manageZones(${s.id})">Зоны и линии</button><button class="btn btn-secondary btn-sm" onclick="manageCounters(${s.id})">Счётчики</button></div>`:''}
             </div>
         </div>`;
@@ -250,11 +250,11 @@ function manageZones(streamId, tab) {
     // Zone list
     const zl = document.getElementById('zone-list');
     zl.innerHTML = zones.length===0 ? '<div style="color:var(--text-secondary);font-size:13px">Нет зон</div>' :
-        zones.map(z=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)"><span>${z.name} <span style="color:var(--text-secondary);font-size:11px">(${z.points.length} точек)</span></span><button class="btn btn-danger btn-sm" onclick="deleteZone(${streamId},${z.id})">Удалить</button></div>`).join('');
+        zones.map(z=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)"><span>${sanitize(z.name)} <span style="color:var(--text-secondary);font-size:11px">(${z.points.length} точек)</span></span><button class="btn btn-danger btn-sm" onclick="deleteZone(${streamId},${z.id})">Удалить</button></div>`).join('');
     // Line list
     const ll = document.getElementById('line-list');
     ll.innerHTML = lines.length===0 ? '<div style="color:var(--text-secondary);font-size:13px">Нет линий</div>' :
-        lines.map(l=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)"><span>${l.name} <span style="color:var(--text-secondary);font-size:11px">(${l.direction==='up'?'↑':'↓'})</span></span><button class="btn btn-danger btn-sm" onclick="deleteLine(${streamId},${l.id})">Удалить</button></div>`).join('');
+        lines.map(l=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)"><span>${sanitize(l.name)} <span style="color:var(--text-secondary);font-size:11px">(${l.direction==='up'?'↑':'↓'})</span></span><button class="btn btn-danger btn-sm" onclick="deleteLine(${streamId},${l.id})">Удалить</button></div>`).join('');
     // Reset canvases
     zonePoints=[]; linePoints=[]; zoneSnapshotImg=null; lineSnapshotImg=null;
     redrawZoneCanvas(); redrawLineCanvas();
@@ -269,7 +269,7 @@ let zoneSnapshotImg=null, zonePoints=[];
 
 async function loadZoneSnapshot() {
     const sid=document.getElementById('zones-stream-id').value;
-    try { const r=await fetch(`/api/stream/${sid}/snapshot`); if(!r.ok)throw new Error('Ошибка'); const b=await r.blob(); const u=URL.createObjectURL(b); const img=new Image(); img.onload=()=>{zoneCanvas.width=img.naturalWidth;zoneCanvas.height=img.naturalHeight;zoneSnapshotImg=img;zoneCtx.drawImage(img,0,0);zonePoints=[];updateZonePointsDisplay();URL.revokeObjectURL(u);}; img.src=u; } catch(e){Toast.error(e.message);}
+    try { const r=await fetch(`/api/stream/${sid}/snapshot`, { headers: { 'Authorization': 'Bearer ' + Auth.getToken() } }); if(!r.ok)throw new Error('Ошибка'); const b=await r.blob(); const u=URL.createObjectURL(b); const img=new Image(); img.onload=()=>{zoneCanvas.width=img.naturalWidth;zoneCanvas.height=img.naturalHeight;zoneSnapshotImg=img;zoneCtx.drawImage(img,0,0);zonePoints=[];updateZonePointsDisplay();URL.revokeObjectURL(u);}; img.src=u; } catch(e){Toast.error(e.message);}
 }
 zoneCanvas.addEventListener('click',e=>{const r=zoneCanvas.getBoundingClientRect();const sx=zoneCanvas.width/r.width,sy=zoneCanvas.height/r.height;zonePoints.push([Math.round((e.clientX-r.left)*sx),Math.round((e.clientY-r.top)*sy)]);redrawZoneCanvas();updateZonePointsDisplay();});
 zoneCanvas.addEventListener('mousemove',e=>{if(!zonePoints.length)return;const r=zoneCanvas.getBoundingClientRect();const sx=zoneCanvas.width/r.width,sy=zoneCanvas.height/r.height;const mx=(e.clientX-r.left)*sx,my=(e.clientY-r.top)*sy;redrawZoneCanvas();zoneCtx.beginPath();zoneCtx.moveTo(zonePoints[zonePoints.length-1][0],zonePoints[zonePoints.length-1][1]);zoneCtx.lineTo(mx,my);zoneCtx.strokeStyle='rgba(79,195,247,0.6)';zoneCtx.lineWidth=1;zoneCtx.setLineDash([5,5]);zoneCtx.stroke();zoneCtx.setLineDash([]);});
@@ -286,7 +286,7 @@ let lineSnapshotImg=null, linePoints=[];
 
 async function loadLineSnapshot() {
     const sid=document.getElementById('zones-stream-id').value;
-    try { const r=await fetch(`/api/stream/${sid}/snapshot`); if(!r.ok)throw new Error('Ошибка'); const b=await r.blob(); const u=URL.createObjectURL(b); const img=new Image(); img.onload=()=>{lineCanvas.width=img.naturalWidth;lineCanvas.height=img.naturalHeight;lineSnapshotImg=img;lineCtx.drawImage(img,0,0);linePoints=[];updateLinePointsDisplay();URL.revokeObjectURL(u);}; img.src=u; } catch(e){Toast.error(e.message);}
+    try { const r=await fetch(`/api/stream/${sid}/snapshot`, { headers: { 'Authorization': 'Bearer ' + Auth.getToken() } }); if(!r.ok)throw new Error('Ошибка'); const b=await r.blob(); const u=URL.createObjectURL(b); const img=new Image(); img.onload=()=>{lineCanvas.width=img.naturalWidth;lineCanvas.height=img.naturalHeight;lineSnapshotImg=img;lineCtx.drawImage(img,0,0);linePoints=[];updateLinePointsDisplay();URL.revokeObjectURL(u);}; img.src=u; } catch(e){Toast.error(e.message);}
 }
 lineCanvas.addEventListener('click',e=>{if(linePoints.length>=2)return;const r=lineCanvas.getBoundingClientRect();const sx=lineCanvas.width/r.width,sy=lineCanvas.height/r.height;linePoints.push([Math.round((e.clientX-r.left)*sx),Math.round((e.clientY-r.top)*sy)]);redrawLineCanvas();updateLinePointsDisplay();});
 function redrawLineCanvas(){if(lineSnapshotImg)lineCtx.drawImage(lineSnapshotImg,0,0);else{lineCtx.fillStyle='#111';lineCtx.fillRect(0,0,lineCanvas.width,lineCanvas.height);lineCtx.fillStyle='#555';lineCtx.font='16px sans-serif';lineCtx.textAlign='center';lineCtx.fillText('Загрузите кадр',lineCanvas.width/2,lineCanvas.height/2);}if(linePoints.length===0)return;if(linePoints.length===2){lineCtx.beginPath();lineCtx.moveTo(linePoints[0][0],linePoints[0][1]);lineCtx.lineTo(linePoints[1][0],linePoints[1][1]);lineCtx.strokeStyle='#ef5350';lineCtx.lineWidth=3;lineCtx.stroke();const mx=(linePoints[0][0]+linePoints[1][0])/2,my=(linePoints[0][1]+linePoints[1][1])/2;const dir=document.getElementById('line-direction').value;const ay=dir==='up'?my-30:my+30;lineCtx.beginPath();lineCtx.moveTo(mx,my);lineCtx.lineTo(mx,ay);lineCtx.strokeStyle='#66bb6a';lineCtx.lineWidth=3;lineCtx.stroke();lineCtx.beginPath();lineCtx.arc(mx,ay,6,0,Math.PI*2);lineCtx.fillStyle='#66bb6a';lineCtx.fill();}linePoints.forEach((p,i)=>{lineCtx.beginPath();lineCtx.arc(p[0],p[1],7,0,Math.PI*2);lineCtx.fillStyle=i===0?'#4fc3f7':'#ef5350';lineCtx.fill();lineCtx.strokeStyle='#fff';lineCtx.lineWidth=2;lineCtx.stroke();});}
@@ -310,13 +310,13 @@ async function manageCounters(streamId) {
     // Populate zone dropdown
     const zoneMenu = document.getElementById('zone-dropdown-menu');
     zoneMenu.innerHTML = '<div class="class-item" onclick="selectCounterZone(\'\',\'—\')">—</div>' +
-        zones.map(z=>`<div class="class-item" onclick="selectCounterZone('${z.id}','${z.name}')">${z.name}</div>`).join('');
+        zones.map(z=>`<div class="class-item" onclick="selectCounterZone('${z.id}','${sanitize(z.name)}')">${sanitize(z.name)}</div>`).join('');
     document.getElementById('counter-zone').value = '';
     document.getElementById('zone-dropdown-label').textContent = '—';
     // Populate line dropdown
     const lineMenu = document.getElementById('line-dropdown-menu');
     lineMenu.innerHTML = '<div class="class-item" onclick="selectCounterLine(\'\',\'—\')">—</div>' +
-        lines.map(l=>`<div class="class-item" onclick="selectCounterLine('${l.id}','${l.name}')">${l.name} ${l.direction==='up'?'↑':'↓'}</div>`).join('');
+        lines.map(l=>`<div class="class-item" onclick="selectCounterLine('${l.id}','${sanitize(l.name)}')">${sanitize(l.name)} ${l.direction==='up'?'↑':'↓'}</div>`).join('');
     document.getElementById('counter-line').value = '';
     document.getElementById('line-dropdown-label').textContent = '—';
     // Reset type
@@ -325,9 +325,9 @@ async function manageCounters(streamId) {
     // List existing counters
     if (counters.length===0) { list.innerHTML = '<div style="color:var(--text-secondary);font-size:13px">Нет счётчиков</div>'; }
     else { list.innerHTML = counters.map(c => {
-        const target = c.type==='zone' ? (zones.find(z=>z.id===c.zone_id)||{}).name||'?' : (lines.find(l=>l.id===c.line_id)||{}).name||'?';
+        const target = c.type==='zone' ? sanitize((zones.find(z=>z.id===c.zone_id)||{}).name||'?') : sanitize((lines.find(l=>l.id===c.line_id)||{}).name||'?');
         const cls = c.class_filter && c.class_filter.length ? c.class_filter.join(', ') : 'Все';
-        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)"><div><span>${c.name}</span><span style="color:var(--text-secondary);font-size:12px;margin-left:8px">→ ${target}</span><span style="color:var(--text-secondary);font-size:11px;margin-left:8px">[${cls}]</span><span style="color:var(--accent);margin-left:8px">${c.current_count}</span></div><button class="btn btn-danger btn-sm" onclick="deleteCounter(${streamId},${c.id})">Удалить</button></div>`;
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)"><div><span>${sanitize(c.name)}</span><span style="color:var(--text-secondary);font-size:12px;margin-left:8px">→ ${target}</span><span style="color:var(--text-secondary);font-size:11px;margin-left:8px">[${cls}]</span><span style="color:var(--accent);margin-left:8px">${c.current_count}</span></div><button class="btn btn-danger btn-sm" onclick="deleteCounter(${streamId},${c.id})">Удалить</button></div>`;
     }).join(''); }
     onCounterTypeChange();
     await loadClassOptions(streamId);
@@ -354,13 +354,13 @@ function renderClassList(classes) {
     if (custom.length) {
         html += '<div class="class-section">Кастомные</div>';
         custom.forEach(c => {
-            html += `<label class="class-item"><input type="checkbox" value="${c.id}" onchange="onClassToggle(${c.id})" ${selectedClassIds.has(c.id)?'checked':''}> ${c.name_ru}</label>`;
+            html += `<label class="class-item"><input type="checkbox" value="${c.id}" onchange="onClassToggle(${c.id})" ${selectedClassIds.has(c.id)?'checked':''}> ${sanitize(c.name_ru)}</label>`;
         });
     }
     if (standard.length) {
         html += '<div class="class-section">Стандартные (YOLO)</div>';
         standard.forEach(c => {
-            html += `<label class="class-item"><input type="checkbox" value="${c.id}" onchange="onClassToggle(${c.id})" ${selectedClassIds.has(c.id)?'checked':''}> ${c.name_ru}</label>`;
+            html += `<label class="class-item"><input type="checkbox" value="${c.id}" onchange="onClassToggle(${c.id})" ${selectedClassIds.has(c.id)?'checked':''}> ${sanitize(c.name_ru)}</label>`;
         });
     }
     document.getElementById('class-list').innerHTML = html || '<div style="padding:12px;color:var(--text-secondary);text-align:center">Ничего не найдено</div>';
@@ -455,11 +455,11 @@ function populateModelSelect(selectId, selectedValue) {
     const custom = Object.entries(models).filter(([k,v]) => v.type === 'custom');
     let html = '';
     if (standard.length) {
-        html += standard.map(([k, v]) => `<option value="${k}" ${k===selectedValue?'selected':''}>${v.name} (${v.size})</option>`).join('');
+        html += standard.map(([k, v]) => `<option value="${k}" ${k===selectedValue?'selected':''}>${sanitize(v.name)} (${v.size})</option>`).join('');
     }
     if (custom.length) {
         html += '<optgroup label="Кастомные модели">';
-        html += custom.map(([k, v]) => `<option value="${v.model_path}" ${v.model_path===selectedValue?'selected':''}>${v.name}</option>`).join('');
+        html += custom.map(([k, v]) => `<option value="${v.model_path}" ${v.model_path===selectedValue?'selected':''}>${sanitize(v.name)}</option>`).join('');
         html += '</optgroup>';
     }
     sel.innerHTML = html;

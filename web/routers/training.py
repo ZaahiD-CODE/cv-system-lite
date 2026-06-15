@@ -118,6 +118,8 @@ async def get_samples(object_id: int, current_user: User = Depends(get_current_u
 
 @router.delete("/objects/{object_id}/samples/{filename}")
 async def delete_sample(object_id: int, filename: str, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
     from pathlib import Path
     ds_dir = get_dataset_dir(object_id)
     img = ds_dir / "images" / "train" / filename

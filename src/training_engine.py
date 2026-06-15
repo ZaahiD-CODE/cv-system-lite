@@ -113,12 +113,14 @@ def start_training(object_id: int, name: str, epochs: int = 30, base_model: str 
     def _train():
         try:
             data_yaml = prepare_dataset(object_id)
-            training_jobs[object_id]["progress"] = 5
+            with training_lock:
+                training_jobs[object_id]["progress"] = 5
 
             from ultralytics import YOLO
 
             model = YOLO(base_model)
-            training_jobs[object_id]["progress"] = 10
+            with training_lock:
+                training_jobs[object_id]["progress"] = 10
 
             results = model.train(
                 data=data_yaml,
@@ -138,16 +140,19 @@ def start_training(object_id: int, name: str, epochs: int = 30, base_model: str 
             if best_model.exists():
                 final_path = MODELS_DIR / f"{model_name}.pt"
                 shutil.copy2(best_model, final_path)
-                training_jobs[object_id]["model_path"] = str(final_path)
-                training_jobs[object_id]["status"] = "ready"
-                training_jobs[object_id]["progress"] = 100
+                with training_lock:
+                    training_jobs[object_id]["model_path"] = str(final_path)
+                    training_jobs[object_id]["status"] = "ready"
+                    training_jobs[object_id]["progress"] = 100
             else:
-                training_jobs[object_id]["status"] = "failed"
-                training_jobs[object_id]["error"] = "Model file not found"
+                with training_lock:
+                    training_jobs[object_id]["status"] = "failed"
+                    training_jobs[object_id]["error"] = "Model file not found"
 
         except Exception as e:
-            training_jobs[object_id]["status"] = "failed"
-            training_jobs[object_id]["error"] = str(e)
+            with training_lock:
+                training_jobs[object_id]["status"] = "failed"
+                training_jobs[object_id]["error"] = str(e)
 
     thread = threading.Thread(target=_train, daemon=True)
     thread.start()

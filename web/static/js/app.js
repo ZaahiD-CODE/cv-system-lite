@@ -66,7 +66,7 @@ function initLayout() {
     const sidebarHTML = `
         <div class="sidebar-header">
             <h2>CV System</h2>
-            <div class="user-info">${username} (${role === 'admin' ? t('adminRole') : t('operatorRole')})</div>
+            <div class="user-info">${sanitize(username)} (${role === 'admin' ? t('adminRole') : t('operatorRole')})</div>
         </div>
         <nav class="sidebar-nav">
             <div class="nav-section">${t('main')}</div>
@@ -227,3 +227,11 @@ function t(key) {
 }
 
 function getLang() { return localStorage.getItem('lang') || 'ru'; }
+
+function sanitize(str) {
+    if (str == null) return '';
+    const s = String(str);
+    const el = document.createElement('span');
+    el.textContent = s;
+    return el.innerHTML;
+}

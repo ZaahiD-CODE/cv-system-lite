@@ -22,8 +22,8 @@ class User(Base):
     hashed_password = Column(String(200), nullable=False)
     role = Column(String(20), default="operator")  # admin, operator
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     streams = relationship("UserStream", back_populates="user")
 
@@ -38,8 +38,8 @@ class Stream(Base):
     is_active = Column(Boolean, default=True)
     detector_model = Column(String(100), default="yolo12n.pt")
     confidence = Column(Float, default=0.5)
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     zones = relationship("Zone", back_populates="stream", cascade="all, delete-orphan")
     lines = relationship("Line", back_populates="stream", cascade="all, delete-orphan")
@@ -113,7 +113,7 @@ class CustomObject(Base):
     model_path = Column(String(500), nullable=True)
     status = Column(String(20), default="pending")  # pending, collecting, training, ready, failed
     progress = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class DetectionEvent(Base):
@@ -130,7 +130,7 @@ class DetectionEvent(Base):
     bbox_x2 = Column(Integer, nullable=False)
     bbox_y2 = Column(Integer, nullable=False)
     track_id = Column(Integer, nullable=True)
-    timestamp = Column(DateTime, default=datetime.now(timezone.utc))
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 def init_db():

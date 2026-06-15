@@ -114,7 +114,6 @@ class Tracker:
         to_delete = []
         for track_id in self.tracks:
             self.tracks[track_id].time_since_update += 1
-            self.tracks[track_id].age += 1
             if self.tracks[track_id].time_since_update > self.max_age:
                 to_delete.append(track_id)
 

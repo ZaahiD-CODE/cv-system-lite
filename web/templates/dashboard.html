@@ -61,7 +61,7 @@
             if (stats.top_classes.length > 0) {
                 topClasses.innerHTML = stats.top_classes.map(c => `
                     <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
-                        <span>${c.class_name}</span>
+                        <span>${sanitize(c.class_name)}</span>
                         <span style="color:var(--accent);font-weight:600">${c.count}</span>
                     </div>
                 `).join('');
@@ -73,10 +73,10 @@
             if (streamStats.length > 0) {
                 container.innerHTML = streamStats.map(s => `
                     <div style="margin-bottom:16px">
-                        <div style="font-weight:500;margin-bottom:8px">${s.stream_name}</div>
+                        <div style="font-weight:500;margin-bottom:8px">${sanitize(s.stream_name)}</div>
                         ${s.counters.length > 0 ? s.counters.map(c => `
                             <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;color:var(--text-secondary)">
-                                <span>${c.counter_name} (${c.type})</span>
+                                <span>${sanitize(c.counter_name)} (${sanitize(c.type)})</span>
                                 <span style="color:var(--accent)">${c.current_count}</span>
                             </div>
                         `).join('') : `<div style="font-size:13px;color:var(--text-secondary)">${t('noCounters')}</div>`}

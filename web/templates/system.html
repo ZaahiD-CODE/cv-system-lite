@@ -153,11 +153,11 @@ async function loadCustomModels() {
         if (models.length===0) { list.innerHTML = `<div style="color:var(--text-secondary)">${t('noCustomModels')}</div>`; return; }
         list.innerHTML = models.map(m => `
             <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
-                <div><strong>${m.filename}</strong>
+                <div><strong>${sanitize(m.filename)}</strong>
                     <span style="color:var(--text-secondary);font-size:12px;margin-left:8px">${m.size_mb} MB</span>
-                    ${m.object_name?`<span style="color:var(--accent);font-size:12px;margin-left:8px">${m.object_name}</span>`:''}
+                    ${m.object_name?`<span style="color:var(--accent);font-size:12px;margin-left:8px">${sanitize(m.object_name)}</span>`:''}
                 </div>
-                <button class="btn btn-danger btn-sm" onclick="deleteModel('${m.filename}')">${t('delete')}</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteModel('${sanitize(m.filename)}')">${t('delete')}</button>
             </div>
         `).join('');
     } catch(e) { console.error(e); }

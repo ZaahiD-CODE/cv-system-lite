@@ -92,8 +92,8 @@
         const tbody = document.getElementById('users-table');
         tbody.innerHTML = allUsers.map(u => `
             <tr>
-                <td>${u.username}</td>
-                <td>${u.email}</td>
+                <td>${sanitize(u.username)}</td>
+                <td>${sanitize(u.email)}</td>
                 <td><span class="badge badge-${u.role}">${u.role==='admin'?(getLang()==='ru'?'админ':'admin'):t('operator')}</span></td>
                 <td><span class="badge ${u.is_active?'badge-active':'badge-inactive'}">${u.is_active?t('active'):t('inactive')}</span></td>
                 <td>${u.stream_ids.length} ${t('streams2')}</td>

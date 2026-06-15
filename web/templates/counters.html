@@ -35,7 +35,7 @@
             counters.forEach(c => { if (!grouped[c.stream_name]) grouped[c.stream_name] = []; grouped[c.stream_name].push(c); });
             container.innerHTML = Object.entries(grouped).map(([stream, ctrs]) => `
                 <div class="card" style="margin-bottom:16px">
-                    <div class="card-header"><h3>${stream}</h3></div>
+                    <div class="card-header"><h3>${sanitize(stream)}</h3></div>
                     <div class="card-body">
                         <div class="table-container">
                             <table>
@@ -43,7 +43,7 @@
                                 <tbody>
                                     ${ctrs.map(c => `
                                         <tr>
-                                            <td>${c.counter_name}</td>
+                                            <td>${sanitize(c.counter_name)}</td>
                                             <td><span class="badge badge-operator">${c.type==='zone'?t('zoneType'):t('lineType')}</span></td>
                                             <td style="font-size:20px;font-weight:600;color:var(--accent)">${c.current_count}</td>
                                             <td>${c.total_count}</td>

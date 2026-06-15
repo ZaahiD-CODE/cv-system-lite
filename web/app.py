@@ -45,11 +45,16 @@ templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
 @app.on_event("startup")
 async def startup():
+    jwt_secret = os.environ.get("JWT_SECRET_KEY", "")
+    admin_password = os.environ.get("CV_ADMIN_PASSWORD", "")
+    if not jwt_secret:
+        raise RuntimeError("JWT_SECRET_KEY environment variable is required")
+    if not admin_password:
+        raise RuntimeError("CV_ADMIN_PASSWORD environment variable is required")
     init_db()
     from web.database import SessionLocal
     db = SessionLocal()
     try:
-        admin_password = os.environ.get("CV_ADMIN_PASSWORD", "XCFqm22tYmzqCZUraP0E")
         admin = db.query(User).filter(User.username == "admin").first()
         if not admin:
             admin = User(
@@ -109,8 +114,9 @@ class StreamManager:
         self.lock = threading.Lock()
 
     def get_capture(self, stream_id: int) -> cv2.VideoCapture | None:
-        if stream_id in self.captures and self.captures[stream_id].isOpened():
-            return self.captures[stream_id]
+        with self.lock:
+            if stream_id in self.captures and self.captures[stream_id].isOpened():
+                return self.captures[stream_id]
         return None
 
     def open_stream(self, stream_id: int, source_type: str, source_path: str) -> bool:
@@ -139,24 +145,43 @@ class StreamManager:
             self.latest_frames.pop(stream_id, None)
 
     def read_frame(self, stream_id: int):
-        cap = self.get_capture(stream_id)
-        if cap is None:
-            return None
-        ret, frame = cap.read()
-        if not ret:
-            return None
-        return frame
+        with self.lock:
+            cap = self.captures.get(stream_id)
+            if cap is None or not cap.isOpened():
+                return None
+            ret, frame = cap.read()
+            if not ret:
+                return None
+            return frame
 
     def get_snapshot(self, stream_id: int, source_type: str, source_path: str):
-        cap = self.get_capture(stream_id)
-        if cap is None:
-            if not self.open_stream(stream_id, source_type, source_path):
+        with self.lock:
+            cap = self.captures.get(stream_id)
+            if cap is None or not cap.isOpened():
+                if not self._open_stream_unlocked(stream_id, source_type, source_path):
+                    return None
+                cap = self.captures.get(stream_id)
+            ret, frame = cap.read()
+            if not ret:
                 return None
-            cap = self.get_capture(stream_id)
-        ret, frame = cap.read()
-        if not ret:
-            return None
-        return frame
+            return frame
+
+    def _open_stream_unlocked(self, stream_id: int, source_type: str, source_path: str) -> bool:
+        if stream_id in self.captures:
+            self.captures[stream_id].release()
+
+        if source_type == "camera":
+            cap = cv2.VideoCapture(int(source_path))
+        elif source_type == "rtsp":
+            cap = cv2.VideoCapture(source_path, cv2.CAP_FFMPEG)
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        else:
+            cap = cv2.VideoCapture(source_path)
+
+        if cap.isOpened():
+            self.captures[stream_id] = cap
+            return True
+        return False
 
 
 stream_manager = StreamManager()

@@ -133,6 +133,8 @@ async def list_custom_models(current_user: User = Depends(require_admin), db=Dep
 
 @router.delete("/custom-models/{filename}")
 async def delete_custom_model(filename: str, current_user: User = Depends(require_admin), db=Depends(get_db)):
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
     models_dir = Path("/root/cv_system/models")
     model_path = models_dir / filename
 
