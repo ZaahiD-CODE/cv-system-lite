@@ -20,13 +20,13 @@ echo "[1/6] Creating virtual environment..."
 if ! command -v python3 &>/dev/null; then
     echo "  python3 not found, installing..."
     check_root
-    apt-get update -qq && apt-get install -y -qq python3 python3-pip python3-dev build-essential
+    apt-get update -qq && apt-get install -y -qq python3 python3-pip python3-dev build-essential libgl1
 fi
 
 if ! dpkg -l python3-venv &>/dev/null 2>&1; then
     echo "  python3-venv not found, installing..."
     check_root
-    apt-get update -qq && apt-get install -y -qq python3-venv python3-dev build-essential
+    apt-get update -qq && apt-get install -y -qq python3-venv python3-dev build-essential libgl1
 fi
 
 if [ ! -d "venv" ]; then
@@ -124,7 +124,7 @@ if [ -n "$DOMAIN" ]; then
     if [[ "$SETUP_NGINX" =~ ^[Yy]$ ]]; then
         check_root
         echo ""
-        echo "[6/6] Configuring nginx + SSL..."
+        echo "  Configuring nginx + SSL..."
 
         if ! command -v nginx &>/dev/null; then
             echo "  Installing nginx..."
@@ -191,29 +191,6 @@ NGINX
             echo "  Requesting SSL certificate for $DOMAIN..."
             certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email --redirect
 
-            SERVICE_FILE="/etc/systemd/system/cv-system.service"
-            cat > "$SERVICE_FILE" <<SERVICE
-[Unit]
-Description=CV System
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=$PROJECT_DIR
-EnvironmentFile=$PROJECT_DIR/.env
-ExecStart=$PROJECT_DIR/venv/bin/python3 $PROJECT_DIR/run_web.py
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-SERVICE
-
-            systemctl daemon-reload
-            systemctl enable cv-system
-            systemctl start cv-system
-
             echo ""
             echo "  Nginx configured: https://$DOMAIN"
             echo "  SSL auto-renew: certbot renew --quiet"
@@ -225,17 +202,41 @@ SERVICE
 fi
 
 echo ""
+echo "[6/6] Creating systemd service..."
+SERVICE_FILE="/etc/systemd/system/cv-system.service"
+cat > "$SERVICE_FILE" <<SERVICE
+[Unit]
+Description=CV System Web Interface
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=$PROJECT_DIR
+EnvironmentFile=$PROJECT_DIR/.env
+ExecStart=$PROJECT_DIR/venv/bin/python3 $PROJECT_DIR/run_web.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+systemctl daemon-reload
+systemctl enable cv-system
+echo "  Service created: cv-system.service"
+
+echo ""
 echo "========================================"
 echo "  Installation complete!"
 echo "========================================"
 echo ""
+echo "Default login: check CV_ADMIN_PASSWORD in .env"
+echo "Manage: systemctl {start,stop,restart,status} cv-system"
+echo ""
 if [ -n "$DOMAIN" ] && [[ "$SETUP_NGINX" =~ ^[Yy]$ ]]; then
     echo "Web interface: https://$DOMAIN"
-    echo "Manage: systemctl {start,stop,restart,status} cv-system"
 else
-    echo "Start the server:"
-    echo "  source venv/bin/activate"
-    echo "  python3 run_web.py"
-    echo ""
+    echo "Start: systemctl start cv-system"
     echo "Web interface: http://localhost:8000"
 fi

@@ -63,13 +63,13 @@ chmod +x install.sh
 ```
 
 Скрипт установки:
-1. Создаёт виртуальное окружение и устанавливает зависимости
+1. Создаёт виртуальное окружение и устанавливает зависимости (включая `libgl1` для OpenCV)
 2. Скачивает модели YOLO12
 3. Генерирует `.env` с секретами (JWT, пароль админа)
-4. Спрашивает домен — если указан, предлагает автоматически настроить:
+4. Создаёт systemd-сервис `cv-system`
+5. Спрашивает домен — если указан, предлагает автоматически настроить:
    - Nginx reverse proxy с WebSocket
    - Let's Encrypt SSL-сертификат
-   - Systemd-сервис `cv-system`
 
 Пароль админа показывается один раз при установке — сохраните его.
 
@@ -112,9 +112,11 @@ python3 -c "import torch; print(torch.cuda.is_available())"
 
 | Переменная | Описание | Default |
 |-----------|----------|---------|
-| `JWT_SECRET_KEY` | Секрет для JWT-токенов | генерируется при установке |
-| `CV_ADMIN_PASSWORD` | Пароль админа | генерируется при установке |
+| `JWT_SECRET_KEY` | Секрет для JWT-токенов | **обязательна**, генерируется при установке |
+| `CV_ADMIN_PASSWORD` | Пароль админа | **обязательна**, генерируется при установке |
 | `CORS_ORIGINS` | Разрешённые origins через запятую | `http://localhost:8000` |
+
+> Сервис не запустится без `JWT_SECRET_KEY` и `CV_ADMIN_PASSWORD`.
 
 ## Запуск
 
@@ -130,7 +132,7 @@ python3 run_web.py
 
 ### Как systemd-сервис
 
-Если при установке был указан домен, сервис уже настроен. Управление:
+`install.sh` автоматически создаёт systemd-сервис. Управление:
 
 ```bash
 systemctl start cv-system
@@ -145,7 +147,7 @@ journalctl -u cv-system -f   # логи в реальном времени
 ```bash
 cat > /etc/systemd/system/cv-system.service <<EOF
 [Unit]
-Description=CV System
+Description=CV System Web Interface
 After=network.target
 
 [Service]
@@ -156,6 +158,7 @@ EnvironmentFile=/root/cv_system/.env
 ExecStart=/root/cv_system/venv/bin/python3 /root/cv_system/run_web.py
 Restart=always
 RestartSec=5
+Environment=PYTHONUNBUFFERED=1
 
 [Install]
 WantedBy=multi-user.target
@@ -263,11 +266,20 @@ pipeline:
 
 ```bash
 source venv/bin/activate
+set -a && source .env && set +a    # тесты требуют JWT_SECRET_KEY и CV_ADMIN_PASSWORD
 
 python3 test_all.py         # Юнит-тесты (детектор, трекер, счётчик, источник, аналитика)
 python3 test_integration.py # Интеграционные (конфиг, потоки, пайплайн)
 python3 test_web.py         # API-тесты (FastAPI TestClient)
 ```
+
+## Безопасность
+
+- Все секреты через переменные окружения (`.env`), не в коде
+- JWT-аутентификация с ролями (admin/operator)
+- XSS-защита: `sanitize()` экранирует пользовательский ввод в HTML
+- Path traversal-защита: валидация имён файлов в API
+- `.env` с `chmod 600`, в `.gitignore`
 
 ## Технологии
 
