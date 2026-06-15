@@ -17,6 +17,7 @@ analytics/
 exports/
 
 .env
+AGENTS.md
 *.log
 .DS_Store
 Thumbs.db
