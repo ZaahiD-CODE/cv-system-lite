@@ -2,7 +2,6 @@ import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field
 from collections import defaultdict
-import uuid
 
 
 @dataclass
@@ -15,7 +14,7 @@ class Track:
     age: int = 0
     hits: int = 1
     time_since_update: int = 0
-    history: List[Tuple[int, int, int, int]] = field(default_factory=list)
+    history: List[Tuple[int, int]] = field(default_factory=list)
     centroid: Tuple[int, int] = (0, 0)
 
     def __post_init__(self):
@@ -43,6 +42,7 @@ class Tracker:
         self.max_age = config.get("max_age", 30)
         self.min_hits = config.get("min_hits", 3)
         self.iou_threshold = config.get("iou_threshold", 0.3)
+        self.distance_threshold = config.get("distance_threshold", 100)
         self._kalman_filters: Dict[int, Any] = {}
 
     def update(self, detections: List[Any]) -> List[Track]:
@@ -87,7 +87,7 @@ class Tracker:
                 if cost_matrix.size == 0:
                     break
                 min_idx = np.unravel_index(cost_matrix.argmin(), cost_matrix.shape)
-                if cost_matrix[min_idx] < 100:
+                if cost_matrix[min_idx] < self.distance_threshold:
                     det_idx, track_idx = min_idx
                     matched.append((det_idx, track_ids[track_idx]))
                     unmatched_dets.remove(det_idx)
@@ -124,6 +124,8 @@ class Tracker:
         return [t for t in self.tracks.values() if t.hits >= self.min_hits]
 
     def _update_iou(self, detections) -> List[Track]:
+        import warnings
+        warnings.warn("IoU tracker not implemented, falling back to centroid", RuntimeWarning)
         return self._update_centroid(detections)
 
     def get_tracks_by_class(self, class_id: int) -> List[Track]:

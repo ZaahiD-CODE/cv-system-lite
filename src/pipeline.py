@@ -34,7 +34,7 @@ class Pipeline:
         self.counter = Counter(pipeline_config.get("counter", {}))
         self.visualizer = Visualizer(pipeline_config.get("output", {}))
         
-        self.analytics = Analytics(pipeline_config.get("output", {}).get("output_path", "analytics"))
+        self.analytics = Analytics(pipeline_config.get("output", {}).get("output_path", "output/"))
         self.data_exporter = DataExporter(pipeline_config.get("output", {}).get("output_path", "exports"))
         
         self.source = self._create_source(pipeline_config)

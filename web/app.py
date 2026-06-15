@@ -206,12 +206,14 @@ async def stream_mjpeg(stream_id: int):
         stream = db.query(Stream).filter(Stream.id == stream_id).first()
         if not stream:
             return HTMLResponse(status_code=404, content="Stream not found")
-        return StreamingResponse(
-            generate_mjpeg(stream_id, stream.source_type, stream.source_path),
-            media_type="multipart/x-mixed-replace; boundary=frame"
-        )
+        source_type = stream.source_type
+        source_path = stream.source_path
     finally:
         db.close()
+    return StreamingResponse(
+        generate_mjpeg(stream_id, source_type, source_path),
+        media_type="multipart/x-mixed-replace; boundary=frame"
+    )
 
 
 @app.get("/api/stream/{stream_id}/snapshot")

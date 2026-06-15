@@ -1,14 +1,16 @@
 import os
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, Float, DateTime, ForeignKey, Text, JSON
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
-from datetime import datetime
+from sqlalchemy.orm import DeclarativeBase, sessionmaker, relationship
+from datetime import datetime, timezone
 
 DATABASE_URL = "sqlite:///./cv_system.db"
 
+class Base(DeclarativeBase):
+    pass
+
+
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
 
 
 class User(Base):
@@ -20,8 +22,8 @@ class User(Base):
     hashed_password = Column(String(200), nullable=False)
     role = Column(String(20), default="operator")  # admin, operator
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
 
     streams = relationship("UserStream", back_populates="user")
 
@@ -36,8 +38,8 @@ class Stream(Base):
     is_active = Column(Boolean, default=True)
     detector_model = Column(String(100), default="yolo12n.pt")
     confidence = Column(Float, default=0.5)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
 
     zones = relationship("Zone", back_populates="stream", cascade="all, delete-orphan")
     lines = relationship("Line", back_populates="stream", cascade="all, delete-orphan")
@@ -111,7 +113,7 @@ class CustomObject(Base):
     model_path = Column(String(500), nullable=True)
     status = Column(String(20), default="pending")  # pending, collecting, training, ready, failed
     progress = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
 
 
 class DetectionEvent(Base):
@@ -128,13 +130,13 @@ class DetectionEvent(Base):
     bbox_x2 = Column(Integer, nullable=False)
     bbox_y2 = Column(Integer, nullable=False)
     track_id = Column(Integer, nullable=True)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=datetime.now(timezone.utc))
 
 
 def init_db():
     Base.metadata.create_all(bind=engine)
     import sqlite3
-    db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'cv_system.db')
+    db_path = os.path.join(os.getcwd(), 'cv_system.db')
     if os.path.exists(db_path):
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
